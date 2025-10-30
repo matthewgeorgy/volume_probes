@@ -1,0 +1,8 @@
+[
+	{
+		"directory": "C:/Dev/Projects/volume_probes/build",
+		"command": "cl /I ../include",
+		"file": "../source/main.cpp"
+	}
+]
+
