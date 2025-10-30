@@ -58,6 +58,60 @@ main()
 	UpdateWindow(Window);
 
 	//////////////////////////////////////////////////////////////////////////
+	// D3D11 Setup
+
+	HRESULT Hr;
+	ID3D11Device *Device;
+	ID3D11DeviceContext *Context;
+	ID3D11Texture2D *Backbuffer,
+					*DepthBuffer;
+	ID3D11RenderTargetView *BackbufferRTV;
+	ID3D11DepthStencilView *BackbufferDSV;
+	ID3D11RasterizerState *RasterState;
+	IDXGISwapChain *SwapChain;
+	DXGI_SWAP_CHAIN_DESC SwapChainDesc = {};
+	D3D11_TEXTURE2D_DESC DepthBufferDesc = {};
+	D3D11_VIEWPORT Viewport;
+	D3D11_RASTERIZER_DESC RasterStateDesc = {};
+
+	SwapChainDesc.BufferDesc.Width = SCR_WIDTH;
+	SwapChainDesc.BufferDesc.Height = SCR_HEIGHT;
+	SwapChainDesc.BufferDesc.RefreshRate = {60, 1};
+	SwapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	SwapChainDesc.SampleDesc = {1, 0};
+	SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	SwapChainDesc.BufferCount = 2;
+	SwapChainDesc.OutputWindow = Window;
+	SwapChainDesc.Windowed = TRUE;
+	SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+	DepthBufferDesc.Width = SCR_WIDTH;
+	DepthBufferDesc.Height = SCR_HEIGHT;
+	DepthBufferDesc.MipLevels = 1;
+	DepthBufferDesc.ArraySize = 1;
+	DepthBufferDesc.Format = DXGI_FORMAT_D32_FLOAT;
+	DepthBufferDesc.SampleDesc = {1, 0};
+	DepthBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	DepthBufferDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+
+	Hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL,
+		D3D11_CREATE_DEVICE_DEBUG, 0, 0, D3D11_SDK_VERSION, &SwapChainDesc,
+		&SwapChain, &Device, NULL, &Context);
+	Hr = SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&Backbuffer);
+	Hr = Device->CreateRenderTargetView(Backbuffer, NULL, &BackbufferRTV);
+	Hr = Device->CreateTexture2D(&DepthBufferDesc, NULL, &DepthBuffer);
+	Hr = Device->CreateDepthStencilView(DepthBuffer, NULL, &BackbufferDSV);
+
+	Viewport.Width = SCR_WIDTH;
+	Viewport.Height = SCR_HEIGHT;
+	Viewport.MaxDepth = 1.0f;
+
+	RasterStateDesc.FillMode = D3D11_FILL_SOLID;
+	RasterStateDesc.CullMode = D3D11_CULL_NONE;
+	RasterStateDesc.DepthClipEnable = TRUE;
+	Hr = Device->CreateRasterizerState(&RasterStateDesc, &RasterState);
+
+	//////////////////////////////////////////////////////////////////////////
 	// Main loop
 
 	for (;;)

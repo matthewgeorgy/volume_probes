@@ -9,6 +9,6 @@ if not exist build (
 
 pushd build\
 
-cl %CPP_FLAGS% %CPP_SRC% kernel32.lib user32.lib gdi32.lib
+cl %CPP_FLAGS% %CPP_SRC% kernel32.lib user32.lib gdi32.lib d3d11.lib dxgi.lib
 
 popd
