@@ -116,7 +116,7 @@ main()
 
 	for (;;)
 	{
-		if (PeekMessage(&Message, Window, 0, 0, PM_REMOVE))
+		if (PeekMessage(&Message, NULL, 0, 0, PM_REMOVE))
 		{
 			if (Message.message == WM_QUIT)
 			{
