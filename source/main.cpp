@@ -1,7 +1,10 @@
 #define MG_USE_WINDOWS_H
+#define MG_IMPL
 #include <mg.h>
 #include <dxgi.h>
 #include <d3d11.h>
+#include <d3dcommon.h>
+#include <d3dcompiler.h>
 #include <stdio.h>
 
 #define SCR_WIDTH 		1024
@@ -112,6 +115,65 @@ main()
 	Hr = Device->CreateRasterizerState(&RasterStateDesc, &RasterState);
 
 	//////////////////////////////////////////////////////////////////////////
+	// Shader setup
+
+	ID3D11VertexShader		*TriangleVS;
+	ID3D11PixelShader 		*TrianglePS;
+	ID3DBlob 				*TriangleVSBlob,
+			 				*TrianglePSBlob;
+
+
+	Hr = D3DReadFileToBlob(L"build/triangle_vs.cso", &TriangleVSBlob);
+	Hr = D3DReadFileToBlob(L"build/triangle_ps.cso", &TrianglePSBlob);
+	Device->CreateVertexShader(TriangleVSBlob->GetBufferPointer(), TriangleVSBlob->GetBufferSize(), NULL, &TriangleVS);
+	Device->CreatePixelShader(TrianglePSBlob->GetBufferPointer(), TrianglePSBlob->GetBufferSize(), NULL, &TrianglePS);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Buffer setup
+
+	ID3D11Buffer						*VertexBuffer,
+										*IndexBuffer;
+	ID3D11ShaderResourceView			*VertexBufferView;
+	D3D11_BUFFER_DESC					VertexBufferDesc = {},
+										IndexBufferDesc = {};
+	D3D11_SUBRESOURCE_DATA				VertexBufferSubData = {},
+										IndexBufferSubData = {};
+	D3D11_SHADER_RESOURCE_VIEW_DESC		VertexBufferViewDesc;
+	v3									Vertices[] =
+	{
+		v3(-0.5f, -0.5f, 0.5f),		v3(1.0f, 0.0f, 0.0f),
+		v3( 0.5f, -0.5f, 0.5f),		v3(0.0f, 1.0f, 0.0f),
+		v3( 0.5f,  0.5f, 0.5f),		v3(0.0f, 0.0f, 1.0f),
+		v3(-0.5f,  0.5f, 0.5f),		v3(1.0f, 1.0f, 1.0f),
+	};
+	u32 								Indices[] =
+	{
+		0, 1, 2,
+		0, 2, 3,
+	};
+
+
+	VertexBufferDesc.ByteWidth = sizeof(Vertices);
+	VertexBufferDesc.StructureByteStride = 2 * sizeof(v3);
+	VertexBufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	VertexBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	VertexBufferSubData.pSysMem = Vertices;
+
+	IndexBufferDesc.ByteWidth = sizeof(Indices);
+	IndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	IndexBufferSubData.pSysMem = Indices;
+
+	Hr = Device->CreateBuffer(&VertexBufferDesc, &VertexBufferSubData, &VertexBuffer);
+	Hr = Device->CreateBuffer(&IndexBufferDesc, &IndexBufferSubData, &IndexBuffer);
+
+	VertexBufferViewDesc.Format = DXGI_FORMAT_UNKNOWN;
+	VertexBufferViewDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	VertexBufferViewDesc.Buffer.FirstElement = 0;
+	VertexBufferViewDesc.Buffer.NumElements = 4;
+
+	Hr = Device->CreateShaderResourceView(VertexBuffer, &VertexBufferViewDesc, &VertexBufferView);
+	
+	//////////////////////////////////////////////////////////////////////////
 	// Main loop
 
 	for (;;)
@@ -127,6 +189,23 @@ main()
 		}
 		else
 		{
+			static FLOAT ClearColor[4] = { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f };
+
+			Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
+			Context->ClearRenderTargetView(BackbufferRTV, ClearColor);
+			Context->ClearDepthStencilView(BackbufferDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+			Context->RSSetViewports(1, &Viewport);
+			Context->RSSetState(RasterState);
+
+			Context->VSSetShader(TriangleVS, 0, 0);
+			Context->PSSetShader(TrianglePS, 0, 0);
+
+			Context->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+			Context->VSSetShaderResources(0, 1, &VertexBufferView);
+
+			Context->DrawIndexed(6, 0, 0);
+
+			SwapChain->Present(0, 0);
 		}
 	}
 
