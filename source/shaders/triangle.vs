@@ -4,6 +4,11 @@ struct vertex
 	float3 Color;
 };
 
+cbuffer model_params : register(b0)
+{
+	float4x4 World, View, Proj;
+};
+
 StructuredBuffer<vertex> Vertices;
 
 struct ps_in
@@ -19,6 +24,10 @@ main(uint VertexID : SV_VertexID)
 	vertex		Input = Vertices[VertexID];
 
 	Output.Position = float4(Input.Position, 1.0);
+	Output.Position = mul(World, Output.Position);
+	Output.Position = mul(View, Output.Position);
+	Output.Position = mul(Proj, Output.Position);
+
 	Output.Color = float4(Input.Color, 1.0);
 
 	return (Output);

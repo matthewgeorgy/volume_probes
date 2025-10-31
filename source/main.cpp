@@ -13,7 +13,27 @@
 #define SCR_WIDTH 		1024
 #define SCR_HEIGHT		768
 
+struct model_params
+{
+	m4		World,
+			View,
+			Proj;
+};
+
+struct camera
+{
+	v3		Pos,
+			Front,
+			Up;
+};
+
+camera gCamera;
+f32 gDeltaTime = 0;
+f32 gLastFrame = 0;
+b32 gFirstMouse = TRUE;
+
 void		ProcessInput(GLFWwindow *Window);
+void		MouseCallback(GLFWwindow *Window, f64 XPos, f64 YPos);
 
 int
 main()
@@ -35,6 +55,9 @@ main()
 		printf("Failed to create window...!\r\n");
 		return (-1);
 	}
+
+ 	glfwSetCursorPosCallback(Window, &MouseCallback);
+    glfwSetInputMode(Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	hWnd = glfwGetWin32Window(Window);
 
@@ -150,6 +173,23 @@ main()
 	VertexBufferViewDesc.Buffer.NumElements = 4;
 
 	Hr = Device->CreateShaderResourceView(VertexBuffer, &VertexBufferViewDesc, &VertexBufferView);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Model params
+
+	model_params			ModelParams = {};
+	ID3D11Buffer			*ModelParamsBuffer;
+	D3D11_BUFFER_DESC		ModelParamsBufferDesc = {};
+
+
+	ModelParamsBufferDesc.ByteWidth = sizeof(ModelParams);
+	ModelParamsBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+	Device->CreateBuffer(&ModelParamsBufferDesc, nullptr, &ModelParamsBuffer);
+
+	gCamera.Pos = v3(0, 0, -4);
+	gCamera.Front = v3(0, 0, 1);
+	gCamera.Up = v3(0, 1, 0);
 	
 	//////////////////////////////////////////////////////////////////////////
 	// Main loop
@@ -159,7 +199,11 @@ main()
 		glfwPollEvents();
 		ProcessInput(Window);
 
-		static FLOAT ClearColor[4] = { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f };
+		static f32 ClearColor[4] = { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f };
+
+		f32 CurrentFrame = f32(glfwGetTime());
+		gDeltaTime = CurrentFrame - gLastFrame;
+		gLastFrame = CurrentFrame;
 
 		Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
 		Context->ClearRenderTargetView(BackbufferRTV, ClearColor);
@@ -167,11 +211,17 @@ main()
 		Context->RSSetViewports(1, &Viewport);
 		Context->RSSetState(RasterState);
 
+		ModelParams.World = Mat4Identity();
+		ModelParams.View = Mat4LookAtLH(gCamera.Pos, gCamera.Pos + gCamera.Front, gCamera.Up);
+		ModelParams.Proj = Mat4PerspectiveLH(45.f, f32(SCR_WIDTH) / f32(SCR_HEIGHT), 0.1f, 1000.f);
+		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &ModelParams, 0, 0);
+
 		Context->VSSetShader(TriangleVS, 0, 0);
 		Context->PSSetShader(TrianglePS, 0, 0);
 
 		Context->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 		Context->VSSetShaderResources(0, 1, &VertexBufferView);
+		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 
 		Context->DrawIndexed(6, 0, 0);
 
@@ -184,9 +234,79 @@ main()
 void		
 ProcessInput(GLFWwindow *Window)
 {
-	if (glfwGetKey(Window, GLFW_KEY_ESCAPE))
+	f32     CamSpeed = gDeltaTime * 2.5f;
+
+    if (glfwGetKey(Window, GLFW_KEY_ESCAPE) == GLFW_TRUE)
+    {
+        glfwSetWindowShouldClose(Window, GLFW_TRUE);
+    }
+
+    if (glfwGetKey(Window, GLFW_KEY_W))
+    {
+        gCamera.Pos = gCamera.Pos + CamSpeed * gCamera.Front;
+    }
+    if (glfwGetKey(Window, GLFW_KEY_S))
+    {
+        gCamera.Pos = gCamera.Pos - CamSpeed * gCamera.Front;
+    }
+    if (glfwGetKey(Window, GLFW_KEY_A))
+    {
+        v3 Offset = CamSpeed * Normalize(Cross(gCamera.Front, gCamera.Up));
+        gCamera.Pos = gCamera.Pos + Offset;
+    }
+    if (glfwGetKey(Window, GLFW_KEY_D))
+    {
+        v3 Offset = CamSpeed * Normalize(Cross(gCamera.Front, gCamera.Up));
+        gCamera.Pos = gCamera.Pos - Offset;
+    }
+}
+
+void
+MouseCallback(GLFWwindow *Window,
+			  f64 XPos,
+			  f64 YPos)
+{
+	f64             XOffset,
+                    YOffset;
+    const f64       MouseSens = 0.08f;
+    v3          	Direction;
+	static f64 		Yaw = -90.0f;
+   	static f64 		Pitch = 0.0f;
+   	static f64 		LastX = SCR_WIDTH / 2;
+   	static f64 		LastY = SCR_HEIGHT / 2;
+
+
+	if (gFirstMouse)
 	{
-		glfwSetWindowShouldClose(Window, GLFW_TRUE);
+		LastX = XPos;
+		LastY = YPos;
+		gFirstMouse = FALSE;
 	}
+
+	XOffset = XPos - LastX,
+	YOffset = LastY - YPos;
+	LastX = XPos;
+	LastY = YPos;
+
+	XOffset *= -MouseSens;
+	YOffset *= MouseSens;
+
+	Yaw += XOffset;
+	Pitch += YOffset;
+
+	if (Pitch > 89.0f)
+	{
+		Pitch = 89.0f;
+	}
+	if (Pitch < -89.0f)
+	{
+		Pitch = -89.0f;
+	}
+
+	Direction.x = Cos(DegsToRads((f32)Yaw)) * Cos(DegsToRads((f32)Pitch));
+	Direction.y = Sin(DegsToRads((f32)Pitch));
+	Direction.z = Sin(DegsToRads((f32)Yaw)) * Cos(DegsToRads((f32)Pitch));
+
+	gCamera.Front = Normalize(Direction);
 }
 
