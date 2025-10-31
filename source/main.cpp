@@ -13,6 +13,9 @@
 #include <mg.h>
 #include <data.h>
 #include <perlin.h>
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_dx11.h>
+#include <imgui/imgui_impl_glfw.h>
 
 #define SCR_WIDTH 		1920
 #define SCR_HEIGHT		1080
@@ -48,6 +51,7 @@ camera gCamera;
 f32 gDeltaTime = 0;
 f32 gLastFrame = 0;
 b32 gFirstMouse = TRUE;
+b32 gImGuiControl = FALSE;
 
 ID3D11ShaderResourceView		*NullSRV[8] = {};
 
@@ -358,6 +362,16 @@ main()
 	RaymarchParams.MaxVal = MaxNoise;
 
 	Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &RaymarchParams, 0, 0);
+
+	//////////////////////////////////////////////////////////////////////////
+	// ImGui setup
+
+	ImGui::CreateContext();
+	ImGuiIO &IO = ImGui::GetIO();
+	(void)IO;
+
+	ImGui_ImplGlfw_InitForOther(Window, true);
+	ImGui_ImplDX11_Init(Device, Context);
 	
 	//////////////////////////////////////////////////////////////////////////
 	// Main loop
@@ -370,6 +384,14 @@ main()
 		f32 CurrentFrame = f32(glfwGetTime());
 		gDeltaTime = CurrentFrame - gLastFrame;
 		gLastFrame = CurrentFrame;
+
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		ImGui::Begin("Foo");
+			ImGui::Text("Blah");
+		ImGui::End();
 
 		static f32 ClearColor[4] = { 0, 0, 0, 1 };
 
@@ -416,6 +438,10 @@ main()
 		Context->DrawIndexed(36, 0, 0);
 		Context->PSSetShaderResources(0, 8, NullSRV);
 
+		ImGui::Render();
+		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+		ImGui::EndFrame();
+
 		SwapChain->Present(0, 0);
 	}
 
@@ -450,6 +476,16 @@ ProcessInput(GLFWwindow *Window)
         v3 Offset = CamSpeed * Normalize(Cross(gCamera.Front, gCamera.Up));
         gCamera.Pos = gCamera.Pos - Offset;
     }
+	if (glfwGetKey(Window, GLFW_KEY_Q) == GLFW_PRESS)
+    {
+        glfwSetInputMode(Window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        gImGuiControl = true;
+    }
+    if (glfwGetKey(Window, GLFW_KEY_E) == GLFW_PRESS)
+    {
+        glfwSetInputMode(Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        gImGuiControl = false;
+    }
 }
 
 void
@@ -467,37 +503,44 @@ MouseCallback(GLFWwindow *Window,
    	static f64 		LastY = SCR_HEIGHT / 2;
 
 
-	if (gFirstMouse)
+	if (!gImGuiControl)
 	{
+		if (gFirstMouse)
+		{
+			LastX = XPos;
+			LastY = YPos;
+			gFirstMouse = FALSE;
+		}
+
+		XOffset = XPos - LastX,
+		YOffset = LastY - YPos;
 		LastX = XPos;
 		LastY = YPos;
-		gFirstMouse = FALSE;
+
+		XOffset *= -MouseSens;
+		YOffset *= MouseSens;
+
+		Yaw += XOffset;
+		Pitch += YOffset;
+
+		if (Pitch > 89.0f)
+		{
+			Pitch = 89.0f;
+		}
+		if (Pitch < -89.0f)
+		{
+			Pitch = -89.0f;
+		}
+
+		Direction.x = Cos(DegsToRads((f32)Yaw)) * Cos(DegsToRads((f32)Pitch));
+		Direction.y = Sin(DegsToRads((f32)Pitch));
+		Direction.z = Sin(DegsToRads((f32)Yaw)) * Cos(DegsToRads((f32)Pitch));
+
+		gCamera.Front = Normalize(Direction);
 	}
-
-	XOffset = XPos - LastX,
-	YOffset = LastY - YPos;
-	LastX = XPos;
-	LastY = YPos;
-
-	XOffset *= -MouseSens;
-	YOffset *= MouseSens;
-
-	Yaw += XOffset;
-	Pitch += YOffset;
-
-	if (Pitch > 89.0f)
+	else
 	{
-		Pitch = 89.0f;
+		gFirstMouse = TRUE;
 	}
-	if (Pitch < -89.0f)
-	{
-		Pitch = -89.0f;
-	}
-
-	Direction.x = Cos(DegsToRads((f32)Yaw)) * Cos(DegsToRads((f32)Pitch));
-	Direction.y = Sin(DegsToRads((f32)Pitch));
-	Direction.z = Sin(DegsToRads((f32)Yaw)) * Cos(DegsToRads((f32)Pitch));
-
-	gCamera.Front = Normalize(Direction);
 }
 

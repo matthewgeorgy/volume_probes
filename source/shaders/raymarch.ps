@@ -14,8 +14,8 @@ cbuffer RaymarchParams : register(b0)
 static const uint MaxIterations = 32;
 
 Texture3D<float>		Volume : register(t0);
-Texture2D<float4>		FrontPositions : register(t1); // backface-culled
-Texture2D<float4>		BackPositions : register(t2);  // frontface-culled
+Texture2D<float4>		BackPositions : register(t1);  // backface-culled, so frontface
+Texture2D<float4>		FrontPositions : register(t2); // frontface-culled, so backface
 SamplerState			LinearSampler : register(s0);
 
 float4
@@ -31,8 +31,8 @@ main(ps_in Input) : SV_Target
 
 	Tex = Input.Position.xy / float2(ScreenWidth, ScreenHeight);
 
-	PosFront = FrontPositions.Sample(LinearSampler, Tex).xyz;
 	PosBack = BackPositions.Sample(LinearSampler, Tex).xyz;
+	PosFront = FrontPositions.Sample(LinearSampler, Tex).xyz;
 
 	Dir = normalize(PosBack - PosFront);
 	StepSize = length(PosFront - PosBack) / MaxIterations;
