@@ -1,6 +1,3 @@
-#define MG_USE_WINDOWS_H
-#define MG_IMPL
-#include <mg.h>
 #include <dxgi.h>
 #include <d3d11.h>
 #include <d3dcommon.h>
@@ -9,10 +6,21 @@
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
-#include "data.h"
+#include <vector>
+
+#define MG_USE_WINDOWS_H
+#define MG_IMPL
+#include <mg.h>
+#include <data.h>
+#include <perlin.h>
 
 #define SCR_WIDTH 		1024
 #define SCR_HEIGHT		768
+
+#define VOLUME_WIDTH	64
+#define VOLUME_HEIGHT	64
+#define VOLUME_DEPTH	64
+#define VOLUME_SIZE		VOLUME_WIDTH * VOLUME_HEIGHT * VOLUME_DEPTH
 
 struct model_params
 {
@@ -225,6 +233,78 @@ main()
 	LinearSamplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
 	Device->CreateSamplerState(&LinearSamplerDesc, &LinearSampler);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Volume texture
+
+	ID3D11Texture3D						*Volume;
+	ID3D11ShaderResourceView			*VolumeSRV;
+	D3D11_TEXTURE3D_DESC				VolumeDesc = {};
+	D3D11_SHADER_RESOURCE_VIEW_DESC		VolumeSRVDesc = {};
+	D3D11_SUBRESOURCE_DATA				VolumeSubData = {};
+	f32									*VolumeData;
+	std::vector<int>					P;
+	f32									MaxNoise = -10000.0f;
+
+
+	P = get_permutation_vector();
+	VolumeData = (f32 *)HeapAlloc(GetProcessHeap(), 0, VOLUME_SIZE * sizeof(*VolumeData));
+
+	for (u32 z = 0; z < VOLUME_DEPTH; z++)
+	{
+		for (u32 y = 0; y < VOLUME_HEIGHT; y++)
+		{
+			for (u32 x = 0; x < VOLUME_WIDTH; x++)
+			{
+				f32 Noise = 0;
+				f32 Amp = 16;
+				f32 Freq = 1.5f;
+				u32 Octaves = 1;
+
+				for (u32 i = 0; i < Octaves; i++)
+				{
+					f32 SampleX = ((2.0f * x / (f32)VOLUME_WIDTH) - 1.0f) * Freq;
+					f32 SampleY = ((2.0f * y / (f32)VOLUME_HEIGHT) - 1.0f) * Freq;
+					f32 SampleZ = ((2.0f * z / (f32)VOLUME_DEPTH) - 1.0f) * Freq;
+
+					Noise += fabs(perlin(SampleX, SampleY, SampleZ, P) * Amp);
+
+					Freq *= 2.0f;
+					Amp *= 0.5f;
+				}
+
+				u32 Index = (z * VOLUME_HEIGHT * VOLUME_WIDTH) + y * VOLUME_WIDTH + x;
+
+				if (Noise > MaxNoise)
+				{
+					MaxNoise = Noise;
+				}
+
+				VolumeData[Index] = Noise;
+			}
+		}
+	}
+
+	VolumeDesc.Width = VOLUME_WIDTH;
+	VolumeDesc.Height = VOLUME_HEIGHT;
+	VolumeDesc.Depth = VOLUME_DEPTH;
+	VolumeDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	VolumeDesc.MipLevels = 1;
+	VolumeDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+	VolumeSubData.pSysMem = VolumeData;
+	VolumeSubData.SysMemPitch = VolumeDesc.Width * sizeof(f32);
+	VolumeSubData.SysMemSlicePitch = VolumeDesc.Width * VolumeDesc.Height * sizeof(f32);
+
+	VolumeSRVDesc.Format = VolumeDesc.Format;
+	VolumeSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+	VolumeSRVDesc.Texture3D.MipLevels = 1;
+	VolumeSRVDesc.Texture3D.MostDetailedMip = 0;
+
+	Device->CreateTexture3D(&VolumeDesc, &VolumeSubData, &Volume);
+	Device->CreateShaderResourceView(Volume, &VolumeSRVDesc, &VolumeSRV);
+
+	HeapFree(GetProcessHeap(), 0, VolumeData);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Model params
