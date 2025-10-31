@@ -9,6 +9,7 @@
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
+#include "data.h"
 
 #define SCR_WIDTH 		1024
 #define SCR_HEIGHT		768
@@ -140,22 +141,10 @@ main()
 	D3D11_SUBRESOURCE_DATA				VertexBufferSubData = {},
 										IndexBufferSubData = {};
 	D3D11_SHADER_RESOURCE_VIEW_DESC		VertexBufferViewDesc;
-	v3									Vertices[] =
-	{
-		v3(-0.5f, -0.5f, 0.5f),		v3(1.0f, 0.0f, 0.0f),
-		v3( 0.5f, -0.5f, 0.5f),		v3(0.0f, 1.0f, 0.0f),
-		v3( 0.5f,  0.5f, 0.5f),		v3(0.0f, 0.0f, 1.0f),
-		v3(-0.5f,  0.5f, 0.5f),		v3(1.0f, 1.0f, 1.0f),
-	};
-	u32 								Indices[] =
-	{
-		0, 1, 2,
-		0, 2, 3,
-	};
 
 
 	VertexBufferDesc.ByteWidth = sizeof(Vertices);
-	VertexBufferDesc.StructureByteStride = 2 * sizeof(v3);
+	VertexBufferDesc.StructureByteStride = sizeof(v3);
 	VertexBufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 	VertexBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 	VertexBufferSubData.pSysMem = Vertices;
@@ -170,7 +159,7 @@ main()
 	VertexBufferViewDesc.Format = DXGI_FORMAT_UNKNOWN;
 	VertexBufferViewDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 	VertexBufferViewDesc.Buffer.FirstElement = 0;
-	VertexBufferViewDesc.Buffer.NumElements = 4;
+	VertexBufferViewDesc.Buffer.NumElements = 8;
 
 	Hr = Device->CreateShaderResourceView(VertexBuffer, &VertexBufferViewDesc, &VertexBufferView);
 
@@ -187,9 +176,9 @@ main()
 
 	Device->CreateBuffer(&ModelParamsBufferDesc, nullptr, &ModelParamsBuffer);
 
-	gCamera.Pos = v3(0, 0, -4);
-	gCamera.Front = v3(0, 0, 1);
-	gCamera.Up = v3(0, 1, 0);
+	gCamera.Pos = v3(3, 1.5f, -3.5f);
+	gCamera.Front = v3(-0.5f, -0.25f, 0.8f);
+	gCamera.Up = v3(0, 1, 0);	
 	
 	//////////////////////////////////////////////////////////////////////////
 	// Main loop
@@ -223,7 +212,7 @@ main()
 		Context->VSSetShaderResources(0, 1, &VertexBufferView);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 
-		Context->DrawIndexed(6, 0, 0);
+		Context->DrawIndexed(36, 0, 0);
 
 		SwapChain->Present(0, 0);
 	}
