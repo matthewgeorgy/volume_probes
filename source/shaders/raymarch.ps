@@ -17,6 +17,7 @@ static const uint MaxIterations = 32;
 Texture3D<float>		Volume : register(t0);
 Texture2D<float4>		BackPositions : register(t1);  // backface-culled, so frontface
 Texture2D<float4>		FrontPositions : register(t2); // frontface-culled, so backface
+Texture1D<float4>		Colormap : register(t3);
 SamplerState			LinearSampler : register(s0);
 
 float4
@@ -57,7 +58,9 @@ main(ps_in Input) : SV_Target
 
 	MaxDensity /= MaxVal;
 
-	return float4(MaxDensity, MaxDensity, MaxDensity, 1);
+	float3 Color = Colormap.Sample(LinearSampler, MaxDensity).rgb;
+
+	return float4(Color, 1.0);
 }
 
 

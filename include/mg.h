@@ -63,8 +63,8 @@ typedef s32                 b32;
 #define Tan(__a)            std::tan(__a)
 #define DegsToRads(__a)     ((__a) * 0.017453f)
 #define RadsToDegs(__a)     ((__a) * 57.29578f)
-#define Min(__a, __b)       ((__a) < (__b) ? (__a) : (__b))
-#define Max(__a, __b)       ((__a) > (__b) ? (__a) : (__b))
+#define _Min(__a, __b)       ((__a) < (__b) ? (__a) : (__b))
+#define _Max(__a, __b)       ((__a) > (__b) ? (__a) : (__b))
 #define PI                  3.141592653589793f
 #define INV_PI              (1.0f / PI)
 
@@ -781,9 +781,9 @@ MinV3(const v3 &U,
 {
     v3 Result;
 
-    Result.x = Min(U.x, V.x);
-    Result.y = Min(U.y, V.y);
-    Result.z = Min(U.z, V.z);
+    Result.x = _Min(U.x, V.x);
+    Result.y = _Min(U.y, V.y);
+    Result.z = _Min(U.z, V.z);
 
     return Result;
 }
@@ -794,9 +794,9 @@ MaxV3(const v3 &U,
 {
     v3 Result;
 
-    Result.x = Max(U.x, V.x);
-    Result.y = Max(U.y, V.y);
-    Result.z = Max(U.z, V.z);
+    Result.x = _Max(U.x, V.x);
+    Result.y = _Max(U.y, V.y);
+    Result.z = _Max(U.z, V.z);
 
     return Result;
 }

@@ -16,6 +16,7 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_dx11.h>
 #include <imgui/imgui_impl_glfw.h>
+#include <implot/implot.h>
 
 #define SCR_WIDTH 		1920
 #define SCR_HEIGHT		1080
@@ -376,12 +377,62 @@ main()
 	// ImGui setup
 
 	ImGui::CreateContext();
+	ImPlot::CreateContext();
 	ImGuiIO &IO = ImGui::GetIO();
 	(void)IO;
 
 	ImGui_ImplGlfw_InitForOther(Window, true);
 	ImGui_ImplDX11_Init(Device, Context);
-	
+
+	//////////////////////////////////////////////////////////////////////////
+	// Colormap
+
+	//////////////////////////////////////////////////////////////////////////
+	// Colormap
+
+	ID3D11Texture1D						*Colormap;
+	ID3D11ShaderResourceView			*ColormapSRV;
+	D3D11_TEXTURE1D_DESC				ColormapDesc = {};
+	D3D11_SHADER_RESOURCE_VIEW_DESC		ColormapSRVDesc = {};
+	D3D11_SUBRESOURCE_DATA				ColormapSubData = {};
+	u32									ColormapSize = 512;
+	v4									*ColormapData;
+
+
+	ColormapData = (v4 *)HeapAlloc(GetProcessHeap(), 0, ColormapSize * sizeof(*ColormapData));
+
+	f32 t = 0;
+	f32 dt = 1.0f / (ColormapSize - 1);
+
+	for (u32 I = 0; I < ColormapSize; I++)
+	{
+		ColormapData[I].x = ImPlot::SampleColormap(t, ImPlotColormap_Spectral).x;
+		ColormapData[I].y = ImPlot::SampleColormap(t, ImPlotColormap_Spectral).y;
+		ColormapData[I].z = ImPlot::SampleColormap(t, ImPlotColormap_Spectral).z;
+		ColormapData[I].w = ImPlot::SampleColormap(t, ImPlotColormap_Spectral).w;
+
+		t += dt;
+	}
+
+	ColormapDesc.Width = ColormapSize;
+	ColormapDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	ColormapDesc.MipLevels = 1;
+	ColormapDesc.ArraySize = 1;
+	ColormapDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+	ColormapSubData.pSysMem = ColormapData;
+	ColormapSubData.SysMemPitch = ColormapDesc.Width * sizeof(*ColormapData);
+
+	ColormapSRVDesc.Format = ColormapDesc.Format;
+	ColormapSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE1D;
+	ColormapSRVDesc.Texture1D.MipLevels = 1;
+	ColormapSRVDesc.Texture1D.MostDetailedMip = 0;
+
+	Device->CreateTexture1D(&ColormapDesc, &ColormapSubData, &Colormap);
+	Device->CreateShaderResourceView(Colormap, &ColormapSRVDesc, &ColormapSRV);	
+
+	HeapFree(GetProcessHeap(), 0, ColormapData);
+
 	//////////////////////////////////////////////////////////////////////////
 	// Main loop
 
@@ -446,6 +497,7 @@ main()
 		Context->PSSetShaderResources(0, 1, &VolumeSRV);
 		Context->PSSetShaderResources(1, 1, &FrontSRV);
 		Context->PSSetShaderResources(2, 1, &BackSRV);
+		Context->PSSetShaderResources(3, 1, &ColormapSRV);
 		Context->PSSetSamplers(0, 1, &LinearSampler);
 		Context->DrawIndexed(36, 0, 0);
 		Context->PSSetShaderResources(0, 8, NullSRV);

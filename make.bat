@@ -1,7 +1,7 @@
 @echo off
 
-set CPP_FLAGS=/W4 /MP /Zi /wd4201 /I ../include /I ../include/imgui /nologo /MT /Fe"main"
-set CPP_SRC=../source/*.cpp ../source/imgui/*.cpp
+set CPP_FLAGS=/W4 /MP /Zi /wd4201 /I ../include /I ../include/imgui /I ../include/implot /nologo /MT /Fe"main"
+set CPP_SRC=../source/*.cpp ../source/imgui/*.cpp ../source/implot/*.cpp
 set CPP_LIBS=glfw3_mt.lib user32.lib gdi32.lib d3d11.lib dxgi.lib d3dcompiler.lib shell32.lib
 
 if not exist build (
