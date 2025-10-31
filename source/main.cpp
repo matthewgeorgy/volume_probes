@@ -127,16 +127,16 @@ main()
 	//////////////////////////////////////////////////////////////////////////
 	// Shader setup
 
-	ID3D11VertexShader		*TriangleVS;
-	ID3D11PixelShader 		*TrianglePS;
-	ID3DBlob 				*TriangleVSBlob,
-			 				*TrianglePSBlob;
+	ID3D11VertexShader		*ModelVS;
+	ID3D11PixelShader 		*ModelPS;
+	ID3DBlob 				*ModelVSBlob,
+			 				*ModelPSBlob;
 
 
-	Hr = D3DReadFileToBlob(L"build/triangle_vs.cso", &TriangleVSBlob);
-	Hr = D3DReadFileToBlob(L"build/triangle_ps.cso", &TrianglePSBlob);
-	Device->CreateVertexShader(TriangleVSBlob->GetBufferPointer(), TriangleVSBlob->GetBufferSize(), NULL, &TriangleVS);
-	Device->CreatePixelShader(TrianglePSBlob->GetBufferPointer(), TrianglePSBlob->GetBufferSize(), NULL, &TrianglePS);
+	Hr = D3DReadFileToBlob(L"build/model_vs.cso", &ModelVSBlob);
+	Hr = D3DReadFileToBlob(L"build/model_ps.cso", &ModelPSBlob);
+	Device->CreateVertexShader(ModelVSBlob->GetBufferPointer(), ModelVSBlob->GetBufferSize(), NULL, &ModelVS);
+	Device->CreatePixelShader(ModelPSBlob->GetBufferPointer(), ModelPSBlob->GetBufferSize(), NULL, &ModelPS);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Buffer setup
@@ -251,32 +251,45 @@ main()
 		glfwPollEvents();
 		ProcessInput(Window);
 
-		static f32 ClearColor[4] = { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f };
-
 		f32 CurrentFrame = f32(glfwGetTime());
 		gDeltaTime = CurrentFrame - gLastFrame;
 		gLastFrame = CurrentFrame;
 
-		Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
-		Context->ClearRenderTargetView(BackbufferRTV, ClearColor);
+		static f32 ClearColor[4] = { 0, 0, 0, 1 };
+
 		Context->ClearDepthStencilView(BackbufferDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+		Context->ClearRenderTargetView(BackbufferRTV, ClearColor);
+		Context->ClearRenderTargetView(FrontRTV, ClearColor);
+		Context->ClearRenderTargetView(BackRTV, ClearColor);
 		Context->RSSetViewports(1, &Viewport);
-		Context->RSSetState(CullNone);
+		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		ModelParams.World = Mat4Identity();
 		ModelParams.View = Mat4LookAtLH(gCamera.Pos, gCamera.Pos + gCamera.Front, gCamera.Up);
-		ModelParams.Proj = Mat4PerspectiveLH(45.f, f32(SCR_WIDTH) / f32(SCR_HEIGHT), 0.1f, 1000.f);
+		ModelParams.Proj = Mat4PerspectiveLH(45.0f, (f32)SCR_WIDTH / (f32)SCR_HEIGHT, 0.1f, 1000.0f);
 		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &ModelParams, 0, 0);
 
-		Context->VSSetShader(TriangleVS, 0, 0);
-		Context->PSSetShader(TrianglePS, 0, 0);
-
+		// Cull texture pass prep
+		Context->VSSetShader(ModelVS, 0, 0);
+		Context->PSSetShader(ModelPS, 0, 0);
 		Context->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 		Context->VSSetShaderResources(0, 1, &VertexBufferView);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
-		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+		// Front
+    	Context->OMSetRenderTargets(1, &FrontRTV, nullptr);
+		Context->RSSetState(CullFront);
 		Context->DrawIndexed(36, 0, 0);
+
+		// Back
+    	Context->OMSetRenderTargets(1, &BackRTV, nullptr);
+		Context->RSSetState(CullBack);
+		Context->DrawIndexed(36, 0, 0);
+
+		// None
+    	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
+		Context->RSSetState(CullNone);
+		Context->DrawIndexed(36, 0, 0);	
 
 		SwapChain->Present(0, 0);
 	}
