@@ -20,16 +20,15 @@ Texture2D<float4>		FrontPositions : register(t2); // frontface-culled, so backfa
 Texture1D<float4>		Colormap : register(t3);
 SamplerState			LinearSampler : register(s0);
 
+float3		CastRayMIP(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
+
 float4
 main(ps_in Input) : SV_Target
 {
 	float2		Tex;
 	float3		PosFront,
 				PosBack,
-				Dir,
-				Pos;
-	float		StepSize;
-
+				Dir;
 
 	Tex = Input.Position.xy / float2(ScreenWidth, ScreenHeight);
 
@@ -37,30 +36,43 @@ main(ps_in Input) : SV_Target
 	PosFront = FrontPositions.Sample(LinearSampler, Tex).xyz;
 
 	Dir = normalize(PosBack - PosFront);
-	StepSize = length(PosFront - PosBack) / MaxIterations;
 
-	Pos = PosFront;
+	float tMin = 0;
+	float tMax = length(PosFront - PosBack);
+	float dt = length(PosFront - PosBack) / MaxIterations;
 
-	float MaxDensity = -1000000;
-
-	for (uint I = 0; I < MaxIterations; I++)
-	{
-		float3 Pos = PosFront + I * StepSize * Dir;
-		float Density = Volume.Sample(LinearSampler, Pos, int3(0, 0, 0));
-
-		if (Density > MaxDensity)
-		{
-			MaxDensity = Density;
-		}
-
-		Pos += StepSize * Dir;
-	}
-
-	MaxDensity /= MaxVal;
-
-	float3 Color = Colormap.Sample(LinearSampler, MaxDensity).rgb;
+	float3 Color = CastRayMIP(PosFront, Dir, tMin, tMax, dt);
 
 	return float4(Color, 1.0);
 }
 
+float3
+CastRayMIP(float3 RayOrigin,
+		   float3 RayDirection,
+		   float tMin,
+		   float tMax,
+		   float dt)
+{
+	float t = tMin;
+	float MaxDensity = -1000;
+
+	[loop]
+	while (t < tMax)
+	{
+		float3 Pos = RayOrigin + t * RayDirection;
+		float Density = Volume.Sample(LinearSampler, Pos, int3(0, 0, 0));
+		float NormalizedDensity = (Density - MinVal) / (MaxVal - MinVal);
+
+		if (NormalizedDensity > MaxDensity)
+		{
+			MaxDensity = NormalizedDensity;
+		}
+
+		t += dt;
+	}
+
+	float3 Color = Colormap.Sample(LinearSampler, MaxDensity).rgb;
+
+	return (Color);
+}
 
