@@ -6,59 +6,37 @@
 #include <d3dcommon.h>
 #include <d3dcompiler.h>
 #include <stdio.h>
+#include <GLFW/glfw3.h>
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
 
 #define SCR_WIDTH 		1024
 #define SCR_HEIGHT		768
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+void		ProcessInput(GLFWwindow *Window);
 
 int
 main()
 {
 	//////////////////////////////////////////////////////////////////////////
-	// Win32 setup
+	// GLFW setup
 
-	ATOM Atom;
-	WNDCLASSEX WndClass = {};
-	HWND Window;
-	MSG Message;
-	RECT WindowRect;
-	INT WindowWidth, WindowHeight;
+	GLFWwindow		*Window;
+	HWND			hWnd;
 
-	WndClass.cbSize = sizeof(WndClass);
-	WndClass.style = CS_VREDRAW | CS_HREDRAW | CS_OWNDC;
-	WndClass.lpfnWndProc = &WndProc;
-	WndClass.lpszClassName = "VolumeProbesWindowClass";
-	WndClass.hInstance = GetModuleHandleA(NULL);
 
-	Atom = RegisterClassEx(&WndClass);
-	if (!Atom)
-	{
-		printf("Failed to create register window class...!r\n");
-		return (-1);
-	}
+	glfwInit();
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-	WindowRect.left = 0;
-	WindowRect.right = SCR_WIDTH;
-	WindowRect.top = 0;
-	WindowRect.bottom = SCR_HEIGHT;
-
-	AdjustWindowRect(&WindowRect, WS_OVERLAPPEDWINDOW, FALSE);
-
-	WindowWidth = WindowRect.right - WindowRect.left;
-	WindowHeight = WindowRect.bottom - WindowRect.top;
-
-	Window = CreateWindowEx(0, WndClass.lpszClassName, "Volume Probes",
-		WS_OVERLAPPEDWINDOW, 0, 0, WindowWidth, WindowHeight,
-		NULL, NULL, WndClass.hInstance, NULL);
+	Window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Volume Probes", nullptr, nullptr);
 	if (!Window)
 	{
 		printf("Failed to create window...!\r\n");
 		return (-1);
 	}
 
-	ShowWindow(Window, SW_SHOW);
-	UpdateWindow(Window);
+	hWnd = glfwGetWin32Window(Window);
 
 	//////////////////////////////////////////////////////////////////////////
 	// D3D11 Setup
@@ -84,7 +62,7 @@ main()
 	SwapChainDesc.SampleDesc = {1, 0};
 	SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	SwapChainDesc.BufferCount = 2;
-	SwapChainDesc.OutputWindow = Window;
+	SwapChainDesc.OutputWindow = hWnd;
 	SwapChainDesc.Windowed = TRUE;
 	SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
@@ -176,72 +154,39 @@ main()
 	//////////////////////////////////////////////////////////////////////////
 	// Main loop
 
-	for (;;)
+	while (!glfwWindowShouldClose(Window))
 	{
-		if (PeekMessage(&Message, NULL, 0, 0, PM_REMOVE))
-		{
-			if (Message.message == WM_QUIT)
-			{
-				break;
-			}
-			TranslateMessage(&Message);
-			DispatchMessage(&Message);
-		}
-		else
-		{
-			static FLOAT ClearColor[4] = { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f };
+		glfwPollEvents();
+		ProcessInput(Window);
 
-			Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
-			Context->ClearRenderTargetView(BackbufferRTV, ClearColor);
-			Context->ClearDepthStencilView(BackbufferDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
-			Context->RSSetViewports(1, &Viewport);
-			Context->RSSetState(RasterState);
+		static FLOAT ClearColor[4] = { 48.f / 255.f, 10.f / 255.f, 36.f / 255.f, 1.f };
 
-			Context->VSSetShader(TriangleVS, 0, 0);
-			Context->PSSetShader(TrianglePS, 0, 0);
+		Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
+		Context->ClearRenderTargetView(BackbufferRTV, ClearColor);
+		Context->ClearDepthStencilView(BackbufferDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+		Context->RSSetViewports(1, &Viewport);
+		Context->RSSetState(RasterState);
 
-			Context->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
-			Context->VSSetShaderResources(0, 1, &VertexBufferView);
+		Context->VSSetShader(TriangleVS, 0, 0);
+		Context->PSSetShader(TrianglePS, 0, 0);
 
-			Context->DrawIndexed(6, 0, 0);
+		Context->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+		Context->VSSetShaderResources(0, 1, &VertexBufferView);
 
-			SwapChain->Present(0, 0);
-		}
+		Context->DrawIndexed(6, 0, 0);
+
+		SwapChain->Present(0, 0);
 	}
 
 	return (0);
 }
 
-LRESULT CALLBACK
-WndProc(HWND hWnd,
-		UINT Msg,
-		WPARAM wParam,
-		LPARAM lParam)
+void		
+ProcessInput(GLFWwindow *Window)
 {
-	LRESULT Result = 0;
-
-	switch (Msg)
+	if (glfwGetKey(Window, GLFW_KEY_ESCAPE))
 	{
-		case WM_KEYDOWN:
-		{
-			if (wParam == VK_ESCAPE)
-			{
-				PostQuitMessage(0);
-			}
-		} break;
-
-		case WM_CLOSE:
-		case WM_DESTROY:
-		{
-			PostQuitMessage(0);
-		} break;
-
-		default:
-		{
-			Result = DefWindowProc(hWnd, Msg, wParam, lParam);
-		} break;
+		glfwSetWindowShouldClose(Window, GLFW_TRUE);
 	}
-
-	return (Result);
 }
 

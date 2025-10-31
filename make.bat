@@ -1,7 +1,8 @@
 @echo off
 
-set CPP_FLAGS=/W4 /Zi /wd4201 /I ../include /nologo
+set CPP_FLAGS=/W4 /Zi /wd4201 /I ../include /nologo /MT
 set CPP_SRC=../source/*.cpp
+set CPP_LIBS=glfw3_mt.lib user32.lib gdi32.lib d3d11.lib dxgi.lib d3dcompiler.lib shell32.lib
 
 if not exist build (
 	mkdir build
@@ -9,7 +10,7 @@ if not exist build (
 
 pushd build\
 
-cl %CPP_FLAGS% %CPP_SRC% kernel32.lib user32.lib gdi32.lib d3d11.lib dxgi.lib d3dcompiler.lib
+cl %CPP_FLAGS% %CPP_SRC% /link %CPP_LIBS%
 
 for %%f in (..\source\shaders\*.vs) do (
     fxc /Zi /nologo /E main /T vs_5_0 /Fo %%~nf_vs.cso /Fd %%~nf_vs.pdb %%f
