@@ -65,19 +65,21 @@ main()
 	//////////////////////////////////////////////////////////////////////////
 	// D3D11 Setup
 
-	HRESULT Hr;
-	ID3D11Device *Device;
-	ID3D11DeviceContext *Context;
-	ID3D11Texture2D *Backbuffer,
-					*DepthBuffer;
-	ID3D11RenderTargetView *BackbufferRTV;
-	ID3D11DepthStencilView *BackbufferDSV;
-	ID3D11RasterizerState *RasterState;
-	IDXGISwapChain *SwapChain;
-	DXGI_SWAP_CHAIN_DESC SwapChainDesc = {};
-	D3D11_TEXTURE2D_DESC DepthBufferDesc = {};
-	D3D11_VIEWPORT Viewport;
-	D3D11_RASTERIZER_DESC RasterStateDesc = {};
+	HRESULT 					Hr;
+	ID3D11Device 				*Device;
+	ID3D11DeviceContext 		*Context;
+	ID3D11Texture2D 			*Backbuffer,
+								*DepthBuffer;
+	ID3D11RenderTargetView		*BackbufferRTV;
+	ID3D11DepthStencilView 		*BackbufferDSV;
+	ID3D11RasterizerState 		*CullFront,
+						  		*CullBack,
+						  		*CullNone;
+	IDXGISwapChain 				*SwapChain;
+	DXGI_SWAP_CHAIN_DESC 		SwapChainDesc = {};
+	D3D11_TEXTURE2D_DESC 		DepthBufferDesc = {};
+	D3D11_VIEWPORT 				Viewport = {};
+	D3D11_RASTERIZER_DESC 		RasterStateDesc = {};
 
 	SwapChainDesc.BufferDesc.Width = SCR_WIDTH;
 	SwapChainDesc.BufferDesc.Height = SCR_HEIGHT;
@@ -114,7 +116,13 @@ main()
 	RasterStateDesc.FillMode = D3D11_FILL_SOLID;
 	RasterStateDesc.CullMode = D3D11_CULL_NONE;
 	RasterStateDesc.DepthClipEnable = TRUE;
-	Hr = Device->CreateRasterizerState(&RasterStateDesc, &RasterState);
+	Hr = Device->CreateRasterizerState(&RasterStateDesc, &CullNone);
+
+	RasterStateDesc.CullMode = D3D11_CULL_FRONT;
+	Hr = Device->CreateRasterizerState(&RasterStateDesc, &CullFront);
+
+	RasterStateDesc.CullMode = D3D11_CULL_BACK;
+	Hr = Device->CreateRasterizerState(&RasterStateDesc, &CullBack);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Shader setup
@@ -164,6 +172,61 @@ main()
 	Hr = Device->CreateShaderResourceView(VertexBuffer, &VertexBufferViewDesc, &VertexBufferView);
 
 	//////////////////////////////////////////////////////////////////////////
+	// Render targets
+
+	ID3D11Texture2D						*FrontTexture,
+										*BackTexture;
+	ID3D11ShaderResourceView			*FrontSRV,
+										*BackSRV;
+	ID3D11RenderTargetView				*FrontRTV,
+										*BackRTV;
+	D3D11_TEXTURE2D_DESC				RenderTextureDesc = {};
+	D3D11_SHADER_RESOURCE_VIEW_DESC		RenderTextureSRVDesc = {};
+	D3D11_RENDER_TARGET_VIEW_DESC		RenderTextureRTVDesc = {};
+
+
+	RenderTextureDesc.Width = SCR_WIDTH;
+	RenderTextureDesc.Height = SCR_HEIGHT;
+	RenderTextureDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	RenderTextureDesc.SampleDesc = {1, 0};
+	RenderTextureDesc.MipLevels = 1;
+	RenderTextureDesc.ArraySize = 1;
+	RenderTextureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+
+	RenderTextureSRVDesc.Format = RenderTextureDesc.Format;
+	RenderTextureSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	RenderTextureSRVDesc.Texture2D.MipLevels = 1;
+	RenderTextureSRVDesc.Texture2D.MostDetailedMip = 0;
+
+	RenderTextureRTVDesc.Format = RenderTextureDesc.Format;
+	RenderTextureRTVDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	RenderTextureRTVDesc.Texture2D.MipSlice = 0;
+
+	Device->CreateTexture2D(&RenderTextureDesc, nullptr, &FrontTexture);
+	Device->CreateTexture2D(&RenderTextureDesc, nullptr, &BackTexture);
+	Device->CreateShaderResourceView(FrontTexture, &RenderTextureSRVDesc, &FrontSRV);
+	Device->CreateShaderResourceView(BackTexture, &RenderTextureSRVDesc, &BackSRV);
+	Device->CreateRenderTargetView(FrontTexture, &RenderTextureRTVDesc, &FrontRTV);
+	Device->CreateRenderTargetView(BackTexture, &RenderTextureRTVDesc, &BackRTV);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Sampler
+
+	ID3D11SamplerState		*LinearSampler;
+	D3D11_SAMPLER_DESC		LinearSamplerDesc = {};
+
+
+	LinearSamplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	LinearSamplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+	LinearSamplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+	LinearSamplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+	LinearSamplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	LinearSamplerDesc.MinLOD = 0.f;
+	LinearSamplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+	Device->CreateSamplerState(&LinearSamplerDesc, &LinearSampler);
+
+	//////////////////////////////////////////////////////////////////////////
 	// Model params
 
 	model_params			ModelParams = {};
@@ -198,7 +261,7 @@ main()
 		Context->ClearRenderTargetView(BackbufferRTV, ClearColor);
 		Context->ClearDepthStencilView(BackbufferDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 		Context->RSSetViewports(1, &Viewport);
-		Context->RSSetState(RasterState);
+		Context->RSSetState(CullNone);
 
 		ModelParams.World = Mat4Identity();
 		ModelParams.View = Mat4LookAtLH(gCamera.Pos, gCamera.Pos + gCamera.Front, gCamera.Up);
@@ -211,6 +274,7 @@ main()
 		Context->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 		Context->VSSetShaderResources(0, 1, &VertexBufferView);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
+		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		Context->DrawIndexed(36, 0, 0);
 
