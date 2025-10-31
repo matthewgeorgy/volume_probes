@@ -3,12 +3,13 @@ struct ps_in
 	float4		Position : SV_Position;
 };
 
-cbuffer RaymarchParams : register(b0)
+cbuffer raymarch_params : register(b0)
 {
 	uint		ScreenWidth,
 				ScreenHeight;
 	float		MinVal,
 				MaxVal;
+	float3		LightPos;
 };
 
 static const uint MaxIterations = 32;

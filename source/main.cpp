@@ -45,6 +45,8 @@ struct raymarch_params
 			ScreenHeight;
 	f32		MinVal,
 			MaxVal;
+	v3		LightPos;
+	f32		_Pad0;
 };
 
 camera gCamera;
@@ -150,23 +152,31 @@ main()
 	// Shader setup
 
 	ID3D11VertexShader		*ModelVS,
-							*RaymarchVS;
+							*RaymarchVS,
+							*LampVS;
 	ID3D11PixelShader 		*ModelPS,
-							*RaymarchPS;
+							*RaymarchPS,
+							*LampPS;
 	ID3DBlob 				*ModelVSBlob,
 			 				*ModelPSBlob,
 							*RaymarchVSBlob,
-			 				*RaymarchPSBlob;
+			 				*RaymarchPSBlob,
+							*LampVSBlob,
+			 				*LampPSBlob;
 
 
 	Hr = D3DReadFileToBlob(L"build/model_vs.cso", &ModelVSBlob);
 	Hr = D3DReadFileToBlob(L"build/model_ps.cso", &ModelPSBlob);
 	Hr = D3DReadFileToBlob(L"build/raymarch_vs.cso", &RaymarchVSBlob);
 	Hr = D3DReadFileToBlob(L"build/raymarch_ps.cso", &RaymarchPSBlob);
+	Hr = D3DReadFileToBlob(L"build/lamp_vs.cso", &LampVSBlob);
+	Hr = D3DReadFileToBlob(L"build/lamp_ps.cso", &LampPSBlob);
 	Device->CreateVertexShader(ModelVSBlob->GetBufferPointer(), ModelVSBlob->GetBufferSize(), NULL, &ModelVS);
 	Device->CreatePixelShader(ModelPSBlob->GetBufferPointer(), ModelPSBlob->GetBufferSize(), NULL, &ModelPS);
 	Device->CreateVertexShader(RaymarchVSBlob->GetBufferPointer(), RaymarchVSBlob->GetBufferSize(), NULL, &RaymarchVS);
 	Device->CreatePixelShader(RaymarchPSBlob->GetBufferPointer(), RaymarchPSBlob->GetBufferSize(), NULL, &RaymarchPS);
+	Device->CreateVertexShader(LampVSBlob->GetBufferPointer(), LampVSBlob->GetBufferSize(), NULL, &LampVS);
+	Device->CreatePixelShader(LampPSBlob->GetBufferPointer(), LampPSBlob->GetBufferSize(), NULL, &LampPS);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Buffer setup
@@ -360,8 +370,7 @@ main()
 	RaymarchParams.ScreenHeight = SCR_HEIGHT;
 	RaymarchParams.MinVal = MinNoise;
 	RaymarchParams.MaxVal = MaxNoise;
-
-	Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &RaymarchParams, 0, 0);
+	RaymarchParams.LightPos = v3(1, 1, 1);
 
 	//////////////////////////////////////////////////////////////////////////
 	// ImGui setup
@@ -390,8 +399,11 @@ main()
 		ImGui::NewFrame();
 
 		ImGui::Begin("Foo");
-			ImGui::Text("Blah");
+			ImGui::DragFloat("Light X", &RaymarchParams.LightPos.x, 0.01f, -5, 5);
+			ImGui::DragFloat("Light Y", &RaymarchParams.LightPos.y, 0.01f, -5, 5);
+			ImGui::DragFloat("Light Z", &RaymarchParams.LightPos.z, 0.01f, -5, 5);
 		ImGui::End();
+		Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &RaymarchParams, 0, 0);
 
 		static f32 ClearColor[4] = { 0, 0, 0, 1 };
 
@@ -424,7 +436,7 @@ main()
 		Context->RSSetState(CullBack);
 		Context->DrawIndexed(36, 0, 0);
 
-		// None
+		// Raymarch volume
     	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
 		Context->RSSetState(CullNone);
 		Context->VSSetShader(RaymarchVS, 0, 0);
@@ -437,6 +449,14 @@ main()
 		Context->PSSetSamplers(0, 1, &LinearSampler);
 		Context->DrawIndexed(36, 0, 0);
 		Context->PSSetShaderResources(0, 8, NullSRV);
+
+		// Lamp
+		ModelParams.World = Mat4Translate(RaymarchParams.LightPos) * Mat4Scale(0.25f);
+		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &ModelParams, 0, 0);
+		Context->VSSetShader(LampVS, 0, 0);
+		Context->PSSetShader(LampPS, 0, 0);
+		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
+		Context->DrawIndexed(36, 0, 0);
 
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
