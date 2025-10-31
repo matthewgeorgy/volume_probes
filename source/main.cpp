@@ -14,8 +14,8 @@
 #include <data.h>
 #include <perlin.h>
 
-#define SCR_WIDTH 		1024
-#define SCR_HEIGHT		768
+#define SCR_WIDTH 		1920
+#define SCR_HEIGHT		1080
 
 #define VOLUME_WIDTH	64
 #define VOLUME_HEIGHT	64
@@ -36,10 +36,20 @@ struct camera
 			Up;
 };
 
+struct raymarch_params
+{
+	u32		ScreenWidth,
+			ScreenHeight;
+	f32		MinVal,
+			MaxVal;
+};
+
 camera gCamera;
 f32 gDeltaTime = 0;
 f32 gLastFrame = 0;
 b32 gFirstMouse = TRUE;
+
+ID3D11ShaderResourceView		*NullSRV[8] = {};
 
 void		ProcessInput(GLFWwindow *Window);
 void		MouseCallback(GLFWwindow *Window, f64 XPos, f64 YPos);
@@ -135,16 +145,24 @@ main()
 	//////////////////////////////////////////////////////////////////////////
 	// Shader setup
 
-	ID3D11VertexShader		*ModelVS;
-	ID3D11PixelShader 		*ModelPS;
+	ID3D11VertexShader		*ModelVS,
+							*RaymarchVS;
+	ID3D11PixelShader 		*ModelPS,
+							*RaymarchPS;
 	ID3DBlob 				*ModelVSBlob,
-			 				*ModelPSBlob;
+			 				*ModelPSBlob,
+							*RaymarchVSBlob,
+			 				*RaymarchPSBlob;
 
 
 	Hr = D3DReadFileToBlob(L"build/model_vs.cso", &ModelVSBlob);
 	Hr = D3DReadFileToBlob(L"build/model_ps.cso", &ModelPSBlob);
+	Hr = D3DReadFileToBlob(L"build/raymarch_vs.cso", &RaymarchVSBlob);
+	Hr = D3DReadFileToBlob(L"build/raymarch_ps.cso", &RaymarchPSBlob);
 	Device->CreateVertexShader(ModelVSBlob->GetBufferPointer(), ModelVSBlob->GetBufferSize(), NULL, &ModelVS);
 	Device->CreatePixelShader(ModelPSBlob->GetBufferPointer(), ModelPSBlob->GetBufferSize(), NULL, &ModelPS);
+	Device->CreateVertexShader(RaymarchVSBlob->GetBufferPointer(), RaymarchVSBlob->GetBufferSize(), NULL, &RaymarchVS);
+	Device->CreatePixelShader(RaymarchPSBlob->GetBufferPointer(), RaymarchPSBlob->GetBufferSize(), NULL, &RaymarchPS);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Buffer setup
@@ -244,7 +262,8 @@ main()
 	D3D11_SUBRESOURCE_DATA				VolumeSubData = {};
 	f32									*VolumeData;
 	std::vector<int>					P;
-	f32									MaxNoise = -10000.0f;
+	f32									MinNoise =  10000.0f,
+										MaxNoise = -10000.0f;
 
 
 	P = get_permutation_vector();
@@ -275,6 +294,10 @@ main()
 
 				u32 Index = (z * VOLUME_HEIGHT * VOLUME_WIDTH) + y * VOLUME_WIDTH + x;
 
+				if (Noise < MinNoise)
+				{
+					MinNoise = Noise;
+				}
 				if (Noise > MaxNoise)
 				{
 					MaxNoise = Noise;
@@ -307,21 +330,34 @@ main()
 	HeapFree(GetProcessHeap(), 0, VolumeData);
 
 	//////////////////////////////////////////////////////////////////////////
-	// Model params
+	// Params
 
 	model_params			ModelParams = {};
-	ID3D11Buffer			*ModelParamsBuffer;
-	D3D11_BUFFER_DESC		ModelParamsBufferDesc = {};
+	raymarch_params			RaymarchParams = {};
+	ID3D11Buffer			*ModelParamsBuffer,
+							*RaymarchParamsBuffer;
+	D3D11_BUFFER_DESC		ModelParamsBufferDesc = {},
+							RaymarchParamsBufferDesc = {};
 
 
 	ModelParamsBufferDesc.ByteWidth = sizeof(ModelParams);
 	ModelParamsBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	RaymarchParamsBufferDesc.ByteWidth = sizeof(RaymarchParams);
+	RaymarchParamsBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
 	Device->CreateBuffer(&ModelParamsBufferDesc, nullptr, &ModelParamsBuffer);
+	Device->CreateBuffer(&RaymarchParamsBufferDesc, nullptr, &RaymarchParamsBuffer);
 
 	gCamera.Pos = v3(3, 1.5f, -3.5f);
 	gCamera.Front = v3(-0.5f, -0.25f, 0.8f);
 	gCamera.Up = v3(0, 1, 0);	
+
+	RaymarchParams.ScreenWidth = SCR_WIDTH;
+	RaymarchParams.ScreenHeight = SCR_HEIGHT;
+	RaymarchParams.MinVal = MinNoise;
+	RaymarchParams.MaxVal = MaxNoise;
+
+	Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &RaymarchParams, 0, 0);
 	
 	//////////////////////////////////////////////////////////////////////////
 	// Main loop
@@ -369,7 +405,16 @@ main()
 		// None
     	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
 		Context->RSSetState(CullNone);
-		Context->DrawIndexed(36, 0, 0);	
+		Context->VSSetShader(RaymarchVS, 0, 0);
+		Context->PSSetShader(RaymarchPS, 0, 0);
+		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
+		Context->PSSetConstantBuffers(0, 1, &RaymarchParamsBuffer);
+		Context->PSSetShaderResources(0, 1, &VolumeSRV);
+		Context->PSSetShaderResources(1, 1, &FrontSRV);
+		Context->PSSetShaderResources(2, 1, &BackSRV);
+		Context->PSSetSamplers(0, 1, &LinearSampler);
+		Context->DrawIndexed(36, 0, 0);
+		Context->PSSetShaderResources(0, 8, NullSRV);
 
 		SwapChain->Present(0, 0);
 	}
