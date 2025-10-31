@@ -5,24 +5,31 @@ struct ps_in
 
 cbuffer raymarch_params : register(b0)
 {
-	uint		ScreenWidth,
-				ScreenHeight;
-	float		MinVal,
-				MaxVal;
+	uint		ScreenWidth;
+	uint		ScreenHeight;
+	float		MinVal;
+	float		MaxVal;
 	float3		LightPos;
+	float 		Absorption;
+	float 		DensityScale;
 };
 
 static const uint MaxIterations = 32;
+#define DARKNESS_THRESHOLD	0.2
 
 Texture3D<float>		Volume : register(t0);
-Texture2D<float4>		BackPositions : register(t1);  // backface-culled, so frontface
-Texture2D<float4>		FrontPositions : register(t2); // frontface-culled, so backface
+Texture2D<float4>		FrontPositions : register(t1); // frontface-culled, so backface
+Texture2D<float4>		BackPositions : register(t2);  // backface-culled, so frontface
 Texture1D<float4>		Colormap : register(t3);
 SamplerState			LinearSampler : register(s0);
+Texture1D<float>		TransferFunction : register(t4);
 
 float4		Accumulate(float4 Color, float4 NewColor, float Brightness);
+float		HenyeyGreenstein(float a, float g);
+float		Rayleigh(float a);
 float4		CastRay(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
 float4		CastRayMIP(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
+float4		CastRayLight(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
 
 float4
 main(ps_in Input) : SV_Target
@@ -34,8 +41,8 @@ main(ps_in Input) : SV_Target
 
 	Tex = Input.Position.xy / float2(ScreenWidth, ScreenHeight);
 
-	PosBack = BackPositions.Sample(LinearSampler, Tex).xyz;
 	PosFront = FrontPositions.Sample(LinearSampler, Tex).xyz;
+	PosBack = BackPositions.Sample(LinearSampler, Tex).xyz;
 
 	Dir = normalize(PosBack - PosFront);
 
@@ -43,7 +50,7 @@ main(ps_in Input) : SV_Target
 	float tMax = length(PosFront - PosBack);
 	float dt = length(PosFront - PosBack) / MaxIterations;
 
-	float4 Color = CastRay(PosFront, Dir, tMin, tMax, dt);
+	float4 Color = CastRayLight(PosFront, Dir, tMin, tMax, dt);
 
 	return (Color);
 }
@@ -115,5 +122,80 @@ Accumulate(float4 Color,
 	float NewAlpha = min(1.0, NewColor.a * Brightness);
 
 	return (Color + float4(NewColor.rgb, 1.0) * OldAlpha * NewAlpha);
+}
+
+float
+Lightmarch(float3 Pos)
+{
+	float3		LightDir = normalize(LightPos - Pos);
+	float		StepSize = length(LightPos - Pos) / float(MaxIterations);
+	float		TotalDensity = 0;
+
+
+	for (uint i = 0; i < MaxIterations; i++)
+	{
+		float Density = DensityScale * Volume.Sample(LinearSampler, Pos, int3(0, 0, 0));
+		/* float NormalizedDensity = (Density - MinVal) / (MaxVal - MinVal); */
+
+		TotalDensity += Density * StepSize;
+
+		Pos += StepSize * LightDir;
+	}
+	
+	float Transmittance = exp(-TotalDensity * Absorption);
+
+	return (DARKNESS_THRESHOLD + Transmittance * (1 - DARKNESS_THRESHOLD));
+}
+
+float4
+CastRayLight(float3 RayOrigin,
+			 float3 RayDirection,
+			 float tMin,
+			 float tMax,
+			 float dt)
+{
+	float 		Transmittance = 1;
+	float		LightEnergy = 0;
+	float 		CosAngle = dot(normalize(RayDirection), normalize(LightPos));
+	float 		Phase = Rayleigh(CosAngle);
+	float 		t = tMin;
+
+
+	[loop]
+	while (t < tMax)
+	{
+		float3 Pos = RayOrigin + t * RayDirection;
+
+		float Density = DensityScale * Volume.Sample(LinearSampler, Pos, int3(0, 0, 0));
+		if (Density > 0)
+		{
+			float LightTransmittance = Lightmarch(Pos);
+
+			LightEnergy += Density * dt * Transmittance * LightTransmittance;
+
+			Transmittance *= exp(-Density * dt * Absorption);
+		}
+
+		t += dt;
+	}
+
+	float4 Color = float4(LightEnergy, LightEnergy, LightEnergy, 1);
+	
+	return (Color);
+}
+
+float
+Rayleigh(float a)
+{
+	return ((3.0f / 16.0f) * (1 + a * a));
+}
+
+float
+HenyeyGreenstein(float a,
+				 float g)
+{
+	float g2 = g * g;
+
+	return (1 - g2) / (4 * 3.1415 * pow(1 + g2 - 2 * g * a, 1.5f));
 }
 

@@ -47,7 +47,9 @@ struct raymarch_params
 	f32		MinVal,
 			MaxVal;
 	v3		LightPos;
-	f32		_Pad0;
+	f32		Absorption;
+	f32		DensityScale;
+	f32		_Pad0[3];
 };
 
 camera gCamera;
@@ -314,33 +316,53 @@ main()
 	D3D11_SHADER_RESOURCE_VIEW_DESC		VolumeSRVDesc = {};
 	D3D11_SUBRESOURCE_DATA				VolumeSubData = {};
 	f32									*VolumeData;
+	std::vector<int>					P;
 	f32									MinNoise =  10000.0f,
 										MaxNoise = -10000.0f;
-	DWORD 								Read;
-	HANDLE 								File;
 
 
+	P = get_permutation_vector();
 	VolumeData = (f32 *)HeapAlloc(GetProcessHeap(), 0, VOLUME_SIZE * sizeof(*VolumeData));
 
-	File = CreateFile("assets/cloud64.bin", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-	ReadFile(File, VolumeData, VOLUME_SIZE * sizeof(*VolumeData), &Read, NULL);
-	printf("Read %u bytes out of %llu\n", Read, VOLUME_SIZE * sizeof(*VolumeData));
-	CloseHandle(File);
-
-	for (u32 i = 0; i < VOLUME_SIZE; i++)
+	for (u32 z = 0; z < VOLUME_DEPTH; z++)
 	{
-		f32 Density = VolumeData[i];
+		for (u32 y = 0; y < VOLUME_HEIGHT; y++)
+		{
+			for (u32 x = 0; x < VOLUME_WIDTH; x++)
+			{
+				f32 Noise = 0;
+				f32 Amp = 16;
+				f32 Freq = 1.5f;
+				u32 Octaves = 1;
 
-		if (Density > MaxNoise)
-		{
-			MaxNoise = Density;
-		}
-		if (Density < MinNoise)
-		{
-			MinNoise = Density;
+				for (u32 i = 0; i < Octaves; i++)
+				{
+					f32 SampleX = ((2.0f * x / (f32)VOLUME_WIDTH) - 1.0f) * Freq;
+					f32 SampleY = ((2.0f * y / (f32)VOLUME_HEIGHT) - 1.0f) * Freq;
+					f32 SampleZ = ((2.0f * z / (f32)VOLUME_DEPTH) - 1.0f) * Freq;
+
+					Noise += fabs(perlin(SampleX, SampleY, SampleZ, P) * Amp);
+
+					Freq *= 2.0f;
+					Amp *= 0.5f;
+				}
+
+				u32 Index = (z * VOLUME_HEIGHT * VOLUME_WIDTH) + y * VOLUME_WIDTH + x;
+
+				if (Noise < MinNoise)
+				{
+					MinNoise = Noise;
+				}
+				if (Noise > MaxNoise)
+				{
+					MaxNoise = Noise;
+				}
+
+				VolumeData[Index] = Noise;
+			}
 		}
 	}
-	
+		
 	VolumeDesc.Width = VOLUME_WIDTH;
 	VolumeDesc.Height = VOLUME_HEIGHT;
 	VolumeDesc.Depth = VOLUME_DEPTH;
@@ -390,6 +412,8 @@ main()
 	RaymarchParams.MinVal = MinNoise;
 	RaymarchParams.MaxVal = MaxNoise;
 	RaymarchParams.LightPos = v3(1, 1, 1);
+	RaymarchParams.Absorption = 1.0;
+	RaymarchParams.DensityScale = 1.0;
 
 	//////////////////////////////////////////////////////////////////////////
 	// ImGui setup
@@ -468,6 +492,8 @@ main()
 			ImGui::DragFloat("Light X", &RaymarchParams.LightPos.x, 0.01f, -5, 5);
 			ImGui::DragFloat("Light Y", &RaymarchParams.LightPos.y, 0.01f, -5, 5);
 			ImGui::DragFloat("Light Z", &RaymarchParams.LightPos.z, 0.01f, -5, 5);
+			ImGui::DragFloat("Absorption", &RaymarchParams.Absorption, 0.01f, 0, 5);
+			ImGui::DragFloat("Density scale", &RaymarchParams.DensityScale, 0.01f, 0, 10);
 		ImGui::End();
 		Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &RaymarchParams, 0, 0);
 
@@ -492,15 +518,15 @@ main()
 		Context->VSSetShaderResources(0, 1, &VertexBufferView);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 
-		// Front
-    	Context->OMSetRenderTargets(1, &FrontRTV, nullptr);
-		Context->RSSetState(CullFront);
-		Context->DrawIndexed(36, 0, 0);
+		// Front-face cull to get back positions
+        Context->OMSetRenderTargets(1, &BackRTV, nullptr);
+        Context->RSSetState(CullFront);
+        Context->DrawIndexed(36, 0, 0);
 
-		// Back
-    	Context->OMSetRenderTargets(1, &BackRTV, nullptr);
-		Context->RSSetState(CullBack);
-		Context->DrawIndexed(36, 0, 0);
+        // Back-face cull to get front positions
+        Context->OMSetRenderTargets(1, &FrontRTV, nullptr);
+        Context->RSSetState(CullBack);
+        Context->DrawIndexed(36, 0, 0);
 
 		// Raymarch volume
     	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
