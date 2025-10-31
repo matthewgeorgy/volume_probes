@@ -60,6 +60,8 @@ ID3D11ShaderResourceView		*NullSRV[8] = {};
 
 void		ProcessInput(GLFWwindow *Window);
 void		MouseCallback(GLFWwindow *Window, f64 XPos, f64 YPos);
+f32			Clamp(f32 x, f32 Low, f32 High);
+f32         Cap(s32 X, s32 Size, f32 Width, f32 Mid, f32 Peak);
 
 int
 main()
@@ -268,6 +270,42 @@ main()
 	Device->CreateSamplerState(&LinearSamplerDesc, &LinearSampler);
 
 	//////////////////////////////////////////////////////////////////////////
+    // Transfer function
+
+    ID3D11Texture1D                     *TransferFunction;
+    ID3D11ShaderResourceView            *TransferFunctionSRV;
+    D3D11_TEXTURE1D_DESC                TransferFunctionDesc = {};
+	D3D11_SUBRESOURCE_DATA				TransferFunctionSubData = {};
+    D3D11_SHADER_RESOURCE_VIEW_DESC     TransferFunctionSRVDesc = {};
+    f32                                 TfMid = 0.5f,
+                                        TfPeak = 1.0f,
+                                        TfWidth = 1.0f;
+ 	s32                                 TfSize = 128;
+    std::vector<f32>                    TfData = std::vector<f32>(TfSize);
+
+
+	for (s32 i = 0; i < TfSize; i++)
+	{
+    	TfData[i] = Cap(i, TfSize, TfWidth, TfMid, TfPeak);
+	}
+
+    TransferFunctionDesc.Width = 128;
+    TransferFunctionDesc.Format = DXGI_FORMAT_R32_FLOAT;
+    TransferFunctionDesc.MipLevels = 1;
+    TransferFunctionDesc.ArraySize = 1;
+    TransferFunctionDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	TransferFunctionSubData.pSysMem = TfData.data();
+	TransferFunctionSubData.SysMemPitch = TransferFunctionDesc.Width * sizeof(f32);
+
+    TransferFunctionSRVDesc.Format = TransferFunctionDesc.Format;
+    TransferFunctionSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE1D;
+    TransferFunctionSRVDesc.Texture1D.MipLevels = 1;
+    TransferFunctionSRVDesc.Texture1D.MostDetailedMip = 0;
+
+    Device->CreateTexture1D(&TransferFunctionDesc, &TransferFunctionSubData, &TransferFunction);
+    Device->CreateShaderResourceView(TransferFunction, &TransferFunctionSRVDesc, &TransferFunctionSRV);
+
+	//////////////////////////////////////////////////////////////////////////
 	// Volume texture
 
 	ID3D11Texture3D						*Volume;
@@ -363,9 +401,6 @@ main()
 
 	ImGui_ImplGlfw_InitForOther(Window, true);
 	ImGui_ImplDX11_Init(Device, Context);
-
-	//////////////////////////////////////////////////////////////////////////
-	// Colormap
 
 	//////////////////////////////////////////////////////////////////////////
 	// Colormap
@@ -478,6 +513,7 @@ main()
 		Context->PSSetShaderResources(1, 1, &FrontSRV);
 		Context->PSSetShaderResources(2, 1, &BackSRV);
 		Context->PSSetShaderResources(3, 1, &ColormapSRV);
+		Context->PSSetShaderResources(4, 1, &TransferFunctionSRV);
 		Context->PSSetSamplers(0, 1, &LinearSampler);
 		Context->DrawIndexed(36, 0, 0);
 		Context->PSSetShaderResources(0, 8, NullSRV);
@@ -593,6 +629,58 @@ MouseCallback(GLFWwindow *Window,
 	else
 	{
 		gFirstMouse = TRUE;
+	}
+}
+
+/* Single-cap transfer function with variable width and midpoint
+
+   Peak -- |         /\
+           |        /  \
+           |       /    \
+           |      /      \
+           |     /        \
+           |    /          \
+           |   /            \
+   0.0 -- ----|------|-------|----
+           |  L     Mid      R
+
+*/
+f32
+Cap(s32 X, s32 Size, f32 Width, f32 Mid, f32 Peak)
+{
+    s32     Midpoint = Size * Mid;
+    s32     Offset = Size * Width / 2;
+    s32     Left = Midpoint - Offset,
+            Right = Midpoint + Offset;
+    f32     Ret;
+
+
+    if (X < Midpoint)
+    {
+        Ret = f32(X - Left) / (Midpoint - Left);
+    }
+    else
+    {
+        Ret = f32(Right - X) / (Midpoint - Left);
+    }
+
+    return (Clamp(Ret * Peak, 0, 1));
+}
+
+f32
+Clamp(f32 x, f32 Low, f32 High)
+{
+	if (x < Low)
+	{
+		return (Low);
+	}
+	else if (x > High)
+	{
+		return (High);
+	}
+	else
+	{
+		return (x);
 	}
 }
 
