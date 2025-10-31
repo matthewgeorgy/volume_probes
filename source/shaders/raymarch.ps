@@ -20,7 +20,9 @@ Texture2D<float4>		FrontPositions : register(t2); // frontface-culled, so backfa
 Texture1D<float4>		Colormap : register(t3);
 SamplerState			LinearSampler : register(s0);
 
-float3		CastRayMIP(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
+float4		Accumulate(float4 Color, float4 NewColor, float Brightness);
+float4		CastRay(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
+float4		CastRayMIP(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
 
 float4
 main(ps_in Input) : SV_Target
@@ -41,12 +43,39 @@ main(ps_in Input) : SV_Target
 	float tMax = length(PosFront - PosBack);
 	float dt = length(PosFront - PosBack) / MaxIterations;
 
-	float3 Color = CastRayMIP(PosFront, Dir, tMin, tMax, dt);
+	float4 Color = CastRay(PosFront, Dir, tMin, tMax, dt);
 
-	return float4(Color, 1.0);
+	return (Color);
 }
 
-float3
+float4
+CastRay(float3 RayOrigin,
+		float3 RayDirection,
+		float tMin,
+		float tMax,
+		float dt)
+{
+	float t = tMin;
+	float4 Color = float4(0, 0, 0, 0);
+
+	[loop]
+	while (t < tMax)
+	{
+		float3 Pos = RayOrigin + t * RayDirection;
+		float Density = Volume.Sample(LinearSampler, Pos, int3(0, 0, 0));
+		float NormalizedDensity = (Density - MinVal) / (MaxVal - MinVal);
+
+		float4 SampledColor = float4(Colormap.Sample(LinearSampler, NormalizedDensity).rgb, 10 * dt);
+
+		Color = Accumulate(Color, SampledColor, 1);
+
+		t += dt;
+	}
+
+	return (Color);
+}
+
+float4
 CastRayMIP(float3 RayOrigin,
 		   float3 RayDirection,
 		   float tMin,
@@ -71,8 +100,20 @@ CastRayMIP(float3 RayOrigin,
 		t += dt;
 	}
 
-	float3 Color = Colormap.Sample(LinearSampler, MaxDensity).rgb;
+	float3 SampledColor = Colormap.Sample(LinearSampler, MaxDensity).rgb;
+	float4 Color = float4(SampledColor, 1.0);
 
 	return (Color);
+}
+
+float4
+Accumulate(float4 Color,
+		   float4 NewColor,
+		   float Brightness)
+{
+	float OldAlpha = 1.0 - Color.a;
+	float NewAlpha = min(1.0, NewColor.a * Brightness);
+
+	return (Color + float4(NewColor.rgb, 1.0) * OldAlpha * NewAlpha);
 }
 
