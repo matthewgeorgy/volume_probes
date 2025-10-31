@@ -276,53 +276,33 @@ main()
 	D3D11_SHADER_RESOURCE_VIEW_DESC		VolumeSRVDesc = {};
 	D3D11_SUBRESOURCE_DATA				VolumeSubData = {};
 	f32									*VolumeData;
-	std::vector<int>					P;
 	f32									MinNoise =  10000.0f,
 										MaxNoise = -10000.0f;
+	DWORD 								Read;
+	HANDLE 								File;
 
 
-	P = get_permutation_vector();
 	VolumeData = (f32 *)HeapAlloc(GetProcessHeap(), 0, VOLUME_SIZE * sizeof(*VolumeData));
 
-	for (u32 z = 0; z < VOLUME_DEPTH; z++)
+	File = CreateFile("assets/cloud64.bin", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	ReadFile(File, VolumeData, VOLUME_SIZE * sizeof(*VolumeData), &Read, NULL);
+	printf("Read %u bytes out of %llu\n", Read, VOLUME_SIZE * sizeof(*VolumeData));
+	CloseHandle(File);
+
+	for (u32 i = 0; i < VOLUME_SIZE; i++)
 	{
-		for (u32 y = 0; y < VOLUME_HEIGHT; y++)
+		f32 Density = VolumeData[i];
+
+		if (Density > MaxNoise)
 		{
-			for (u32 x = 0; x < VOLUME_WIDTH; x++)
-			{
-				f32 Noise = 0;
-				f32 Amp = 16;
-				f32 Freq = 1.5f;
-				u32 Octaves = 1;
-
-				for (u32 i = 0; i < Octaves; i++)
-				{
-					f32 SampleX = ((2.0f * x / (f32)VOLUME_WIDTH) - 1.0f) * Freq;
-					f32 SampleY = ((2.0f * y / (f32)VOLUME_HEIGHT) - 1.0f) * Freq;
-					f32 SampleZ = ((2.0f * z / (f32)VOLUME_DEPTH) - 1.0f) * Freq;
-
-					Noise += fabs(perlin(SampleX, SampleY, SampleZ, P) * Amp);
-
-					Freq *= 2.0f;
-					Amp *= 0.5f;
-				}
-
-				u32 Index = (z * VOLUME_HEIGHT * VOLUME_WIDTH) + y * VOLUME_WIDTH + x;
-
-				if (Noise < MinNoise)
-				{
-					MinNoise = Noise;
-				}
-				if (Noise > MaxNoise)
-				{
-					MaxNoise = Noise;
-				}
-
-				VolumeData[Index] = Noise;
-			}
+			MaxNoise = Density;
+		}
+		if (Density < MinNoise)
+		{
+			MinNoise = Density;
 		}
 	}
-
+	
 	VolumeDesc.Width = VOLUME_WIDTH;
 	VolumeDesc.Height = VOLUME_HEIGHT;
 	VolumeDesc.Depth = VOLUME_DEPTH;
