@@ -1,4 +1,4 @@
-v3		Vertices[] =
+v3		CubeVertices[] =
 {
 	 v3(0.0f,  0.0f,  0.0f),
 	 v3(0.0f,  0.0f,  1.0f),
@@ -10,7 +10,7 @@ v3		Vertices[] =
 	 v3(1.0f,  1.0f,  1.0f),	
 };
 
-u32		Indices[] =
+u32		CubeIndices[] =
 {
 	0, 1, 2,
 	2, 1, 3,

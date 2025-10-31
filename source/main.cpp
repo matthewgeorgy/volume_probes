@@ -63,7 +63,8 @@ ID3D11ShaderResourceView		*NullSRV[8] = {};
 void		ProcessInput(GLFWwindow *Window);
 void		MouseCallback(GLFWwindow *Window, f64 XPos, f64 YPos);
 f32			Clamp(f32 x, f32 Low, f32 High);
-f32         Cap(s32 X, s32 Size, f32 Width, f32 Mid, f32 Peak);
+f32        	Cap(s32 X, s32 Size, f32 Width, f32 Mid, f32 Peak);
+void		GenerateSphereData(std::vector<v3> &Vertices, std::vector<u32> &Indices, s32 SectorCount, s32 StackCount, f32 Radius);
 
 int
 main()
@@ -184,37 +185,74 @@ main()
 	Device->CreatePixelShader(LampPSBlob->GetBufferPointer(), LampPSBlob->GetBufferSize(), NULL, &LampPS);
 
 	//////////////////////////////////////////////////////////////////////////
-	// Buffer setup
+	// Cube buffer setup
 
-	ID3D11Buffer						*VertexBuffer,
-										*IndexBuffer;
-	ID3D11ShaderResourceView			*VertexBufferView;
-	D3D11_BUFFER_DESC					VertexBufferDesc = {},
-										IndexBufferDesc = {};
-	D3D11_SUBRESOURCE_DATA				VertexBufferSubData = {},
-										IndexBufferSubData = {};
-	D3D11_SHADER_RESOURCE_VIEW_DESC		VertexBufferViewDesc;
+	ID3D11Buffer						*CubeVertexBuffer,
+										*CubeIndexBuffer;
+	ID3D11ShaderResourceView			*CubeVertexBufferView;
+	D3D11_BUFFER_DESC					CubeVertexBufferDesc = {},
+										CubeIndexBufferDesc = {};
+	D3D11_SUBRESOURCE_DATA				CubeVertexBufferSubData = {},
+										CubeIndexBufferSubData = {};
+	D3D11_SHADER_RESOURCE_VIEW_DESC		CubeVertexBufferViewDesc;
 
 
-	VertexBufferDesc.ByteWidth = sizeof(Vertices);
-	VertexBufferDesc.StructureByteStride = sizeof(v3);
-	VertexBufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-	VertexBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-	VertexBufferSubData.pSysMem = Vertices;
+	CubeVertexBufferDesc.ByteWidth = sizeof(CubeVertices);
+	CubeVertexBufferDesc.StructureByteStride = sizeof(v3);
+	CubeVertexBufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	CubeVertexBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	CubeVertexBufferSubData.pSysMem = CubeVertices;
 
-	IndexBufferDesc.ByteWidth = sizeof(Indices);
-	IndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	IndexBufferSubData.pSysMem = Indices;
+	CubeIndexBufferDesc.ByteWidth = sizeof(CubeIndices);
+	CubeIndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	CubeIndexBufferSubData.pSysMem = CubeIndices;
 
-	Hr = Device->CreateBuffer(&VertexBufferDesc, &VertexBufferSubData, &VertexBuffer);
-	Hr = Device->CreateBuffer(&IndexBufferDesc, &IndexBufferSubData, &IndexBuffer);
+	Hr = Device->CreateBuffer(&CubeVertexBufferDesc, &CubeVertexBufferSubData, &CubeVertexBuffer);
+	Hr = Device->CreateBuffer(&CubeIndexBufferDesc, &CubeIndexBufferSubData, &CubeIndexBuffer);
 
-	VertexBufferViewDesc.Format = DXGI_FORMAT_UNKNOWN;
-	VertexBufferViewDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-	VertexBufferViewDesc.Buffer.FirstElement = 0;
-	VertexBufferViewDesc.Buffer.NumElements = 8;
+	CubeVertexBufferViewDesc.Format = DXGI_FORMAT_UNKNOWN;
+	CubeVertexBufferViewDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	CubeVertexBufferViewDesc.Buffer.FirstElement = 0;
+	CubeVertexBufferViewDesc.Buffer.NumElements = 8;
 
-	Hr = Device->CreateShaderResourceView(VertexBuffer, &VertexBufferViewDesc, &VertexBufferView);
+	Hr = Device->CreateShaderResourceView(CubeVertexBuffer, &CubeVertexBufferViewDesc, &CubeVertexBufferView);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Sphere buffer setup
+
+	ID3D11Buffer						*SphereVertexBuffer,
+										*SphereIndexBuffer;
+	ID3D11ShaderResourceView			*SphereVertexBufferView;
+	D3D11_BUFFER_DESC					SphereVertexBufferDesc = {},
+										SphereIndexBufferDesc = {};
+	D3D11_SUBRESOURCE_DATA				SphereVertexBufferSubData = {},
+										SphereIndexBufferSubData = {};
+	D3D11_SHADER_RESOURCE_VIEW_DESC		SphereVertexBufferViewDesc;
+	std::vector<v3>						SphereVertices;
+	std::vector<u32>					SphereIndices;
+
+
+	GenerateSphereData(SphereVertices, SphereIndices, 36, 18, 0.25f);
+
+	SphereVertexBufferDesc.ByteWidth = sizeof(v3) * SphereVertices.size();
+	SphereVertexBufferDesc.StructureByteStride = sizeof(v3);
+	SphereVertexBufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	SphereVertexBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	SphereVertexBufferSubData.pSysMem = SphereVertices.data();
+
+	SphereIndexBufferDesc.ByteWidth = sizeof(u32) * SphereIndices.size();
+	SphereIndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	SphereIndexBufferSubData.pSysMem = SphereIndices.data();
+
+	Hr = Device->CreateBuffer(&SphereVertexBufferDesc, &SphereVertexBufferSubData, &SphereVertexBuffer);
+	Hr = Device->CreateBuffer(&SphereIndexBufferDesc, &SphereIndexBufferSubData, &SphereIndexBuffer);
+
+	SphereVertexBufferViewDesc.Format = DXGI_FORMAT_UNKNOWN;
+	SphereVertexBufferViewDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	SphereVertexBufferViewDesc.Buffer.FirstElement = 0;
+	SphereVertexBufferViewDesc.Buffer.NumElements = SphereVertices.size();
+
+	Hr = Device->CreateShaderResourceView(SphereVertexBuffer, &SphereVertexBufferViewDesc, &SphereVertexBufferView);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Render targets
@@ -514,8 +552,8 @@ main()
 		// Cull texture pass prep
 		Context->VSSetShader(ModelVS, 0, 0);
 		Context->PSSetShader(ModelPS, 0, 0);
-		Context->IASetIndexBuffer(IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
-		Context->VSSetShaderResources(0, 1, &VertexBufferView);
+		Context->IASetIndexBuffer(CubeIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+		Context->VSSetShaderResources(0, 1, &CubeVertexBufferView);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 
 		// Front-face cull to get back positions
@@ -545,12 +583,14 @@ main()
 		Context->PSSetShaderResources(0, 8, NullSRV);
 
 		// Lamp
-		ModelParams.World = Mat4Translate(RaymarchParams.LightPos) * Mat4Scale(0.25f);
+		ModelParams.World = Mat4Translate(RaymarchParams.LightPos);
 		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &ModelParams, 0, 0);
+		Context->IASetIndexBuffer(SphereIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+		Context->VSSetShaderResources(0, 1, &SphereVertexBufferView);
 		Context->VSSetShader(LampVS, 0, 0);
 		Context->PSSetShader(LampPS, 0, 0);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
-		Context->DrawIndexed(36, 0, 0);
+		Context->DrawIndexed(SphereIndices.size(), 0, 0);
 
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -674,8 +714,8 @@ MouseCallback(GLFWwindow *Window,
 f32
 Cap(s32 X, s32 Size, f32 Width, f32 Mid, f32 Peak)
 {
-    s32     Midpoint = Size * Mid;
-    s32     Offset = Size * Width / 2;
+    s32     Midpoint = s32(Size * Mid);
+    s32     Offset = s32(Size * Width / 2);
     s32     Left = Midpoint - Offset,
             Right = Midpoint + Offset;
     f32     Ret;
@@ -707,6 +747,70 @@ Clamp(f32 x, f32 Low, f32 High)
 	else
 	{
 		return (x);
+	}
+}
+
+void
+GenerateSphereData(std::vector<v3> &Vertices,
+				   std::vector<u32> &Indices,
+				   s32 SectorCount,
+				   s32 StackCount,
+				   f32 Radius)
+{
+	// clear memory of prev arrays
+	std::vector<v3>().swap(Vertices);
+	std::vector<u32>().swap(Indices);
+
+	f32 x, y, z, xy;                              // vertex position
+
+	f32 SectorStep = 2 * PI / SectorCount;
+	f32 StackStep = PI / StackCount;
+	f32 SectorAngle, StackAngle;
+
+	for(s32 i = 0; i <= StackCount; ++i)
+	{
+		StackAngle = PI / 2 - i * StackStep;        // starting from pi/2 to -pi/2
+		xy = Radius * Cos(StackAngle);             // r * cos(u)
+		z = Radius * Sin(StackAngle);              // r * sin(u)
+
+		// add (sectorCount+1) vertices per stack
+		// first and last vertices have same position and normal, but different tex coords
+		for(s32 j = 0; j <= SectorCount; ++j)
+		{
+			SectorAngle = j * SectorStep;           // starting from 0 to 2pi
+
+			// vertex position (x, y, z)
+			x = xy * Cos(SectorAngle);             // r * cos(u) * cos(v)
+			y = xy * Sin(SectorAngle);             // r * cos(u) * sin(v)
+			Vertices.push_back(v3(x, y, z));
+		}
+	}
+
+	u32 k1, k2;
+	for(int i = 0; i < StackCount; ++i)
+	{
+		k1 = i * (SectorCount + 1);     // beginning of current stack
+		k2 = k1 + SectorCount + 1;      // beginning of next stack
+
+		for(int j = 0; j < SectorCount; ++j, ++k1, ++k2)
+		{
+			// 2 triangles per sector excluding first and last stacks
+			// k1 => k2 => k1+1
+			if(i != 0)
+			{
+				Indices.push_back(k1);
+				Indices.push_back(k2);
+				Indices.push_back(k1 + 1);
+			}
+
+			// k1+1 => k2 => k2+1
+			if(i != (StackCount - 1))
+			{
+				Indices.push_back(k1 + 1);
+				Indices.push_back(k2);
+				Indices.push_back(k2 + 1);
+			}
+		}
 	}
 }
 
