@@ -26,13 +26,12 @@ main(uint VertexID : SV_VertexID)
 
 
 	Input = Vertices[VertexID];
-	Output.Pos = float4(Input, 1.0f);
+	float4 InputPos = mul(World, float4(Input.Pos, 1.0f));
 
-	Output.Pos = mul(World, Output.Pos);
-	Output.Pos = mul(View, Output.Pos);
+	Output.Pos = mul(View, InputPos);
 	Output.Pos = mul(Proj, Output.Pos);
 
-	Output.Tex = float4(0.5f * (Input.Pos + 1), 1.0f);
+	Output.Tex = InputPos;
 
 	return (Output);
 }

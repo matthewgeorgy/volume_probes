@@ -513,6 +513,8 @@ main()
 	//////////////////////////////////////////////////////////////////////////
 	// Main loop
 
+	f32 Time = 0;
+
 	while (!glfwWindowShouldClose(Window))
 	{
 		glfwPollEvents();
@@ -544,7 +546,7 @@ main()
 		Context->RSSetViewports(1, &Viewport);
 		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		ModelParams.World = Mat4Identity();
+		ModelParams.World = Mat4Identity();//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
 		ModelParams.View = Mat4LookAtLH(gCamera.Pos, gCamera.Pos + gCamera.Front, gCamera.Up);
 		ModelParams.Proj = Mat4PerspectiveLH(45.0f, (f32)SCR_WIDTH / (f32)SCR_HEIGHT, 0.1f, 1000.0f);
 		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &ModelParams, 0, 0);
@@ -597,6 +599,7 @@ main()
 		ImGui::EndFrame();
 
 		SwapChain->Present(0, 0);
+		Time += 0.05f;
 	}
 
 	return (0);
