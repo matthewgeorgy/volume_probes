@@ -623,6 +623,24 @@ main()
 
 	HeapFree(GetProcessHeap(), 0, ColormapData);
 
+    //////////////////////////////////////////////////////////////////////////
+    // Blend state
+
+	ID3D11BlendState		*BlendState;
+	D3D11_BLEND_DESC		BlendStateDesc = {};
+
+
+	BlendStateDesc.RenderTarget[0].BlendEnable = TRUE;
+	BlendStateDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+	BlendStateDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+	BlendStateDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	BlendStateDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+	BlendStateDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+	BlendStateDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+	BlendStateDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+
+	Hr = Device->CreateBlendState(&BlendStateDesc, &BlendState);
+
 	//////////////////////////////////////////////////////////////////////////
 	// Main loop
 
@@ -675,7 +693,7 @@ main()
 		ImGui::End();
 		Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &gRaymarchParams, 0, 0);
 
-		static f32 ClearColor[4] = { 0, 0, 0, 1 };
+		static f32 ClearColor[4] = { 0, 0, 0, 0 };
 
 		Context->ClearDepthStencilView(BackbufferDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 		Context->ClearRenderTargetView(BackbufferRTV, ClearColor);
@@ -688,6 +706,11 @@ main()
 		gModelParams.View = Mat4LookAtLH(gCamera.Pos, gCamera.Pos + gCamera.Front, gCamera.Up);
 		gModelParams.Proj = Mat4PerspectiveLH(45.0f, (f32)SCR_WIDTH / (f32)SCR_HEIGHT, 0.1f, 1000.0f);
 		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &gModelParams, 0, 0);
+
+		//////////////////////////////////////////////////////////////////////
+		// First pass, generate ray textures and probe data
+
+		Context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFF);
 
 		// Cull texture pass prep
 		Context->VSSetShader(ModelVS, 0, 0);
@@ -706,8 +729,6 @@ main()
         Context->RSSetState(CullBack);
         Context->DrawIndexed(36, 0, 0);
 
-    	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
-		Context->RSSetState(CullNone);
 		// Probes compute pass
 		Context->CSSetShader(ProbeCS, 0, 0);
 		Context->CSSetSamplers(0, 1, &LinearSampler);
@@ -718,6 +739,16 @@ main()
 		Context->CSSetUnorderedAccessViews(0, 1, &ProbesUAV, 0);
 		Context->Dispatch(GridParams.GridDims.x, GridParams.GridDims.y, GridParams.GridDims.z);
 		Context->CSSetUnorderedAccessViews(0, 8, NULL_UAV, 0);	
+
+		//
+		//////////////////////////////////////////////////////////////////////
+
+    	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
+		Context->RSSetState(CullNone);
+		Context->OMSetBlendState(BlendState, nullptr, 0xFFFFFFF);
+
+		//////////////////////////////////////////////////////////////////////
+		// Second pass, render volume, lamp, and probes
 
 		if (ShowProbes)
 		{
@@ -731,23 +762,6 @@ main()
 			Context->PSSetShaderResources(0, 8, NULL_SRV);
 		}
 
-		// Raymarch volume
-		Context->VSSetShader(RaymarchVS, 0, 0);
-		Context->PSSetShader(RaymarchPS, 0, 0);
-		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
-		Context->PSSetConstantBuffers(0, 1, &ModelParamsBuffer);
-		Context->PSSetConstantBuffers(1, 1, &RaymarchParamsBuffer);
-		Context->PSSetConstantBuffers(2, 1, &GridParamsBuffer);
-		Context->PSSetShaderResources(0, 1, &gVolumeSRV);
-		Context->PSSetShaderResources(1, 1, &FrontSRV);
-		Context->PSSetShaderResources(2, 1, &BackSRV);
-		Context->PSSetShaderResources(3, 1, &ColormapSRV);
-		Context->PSSetShaderResources(4, 1, &ProbesSRV);
-		/* Context->PSSetShaderResources(4, 1, &TransferFunctionSRV); */
-		Context->PSSetSamplers(0, 1, &LinearSampler);
-		Context->DrawIndexed(36, 0, 0);
-		Context->PSSetShaderResources(0, 8, NULL_SRV);
-
 		// Lamp
 		gModelParams.World = Mat4Translate(gRaymarchParams.LightPos);
 		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &gModelParams, 0, 0);
@@ -757,6 +771,29 @@ main()
 		Context->PSSetShader(LampPS, 0, 0);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 		Context->DrawIndexed(SphereIndices.size(), 0, 0);
+
+		// Raymarch volume
+		gModelParams.World = Mat4Identity();//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
+		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &gModelParams, 0, 0);
+		Context->VSSetShader(RaymarchVS, 0, 0);
+		Context->PSSetShader(RaymarchPS, 0, 0);
+		Context->IASetIndexBuffer(CubeIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+		Context->VSSetShaderResources(0, 1, &CubeVertexBufferView);
+		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
+		Context->PSSetConstantBuffers(0, 1, &ModelParamsBuffer);
+		Context->PSSetConstantBuffers(1, 1, &RaymarchParamsBuffer);
+		Context->PSSetConstantBuffers(2, 1, &GridParamsBuffer);
+		Context->PSSetShaderResources(0, 1, &gVolumeSRV);
+		Context->PSSetShaderResources(1, 1, &FrontSRV);
+		Context->PSSetShaderResources(2, 1, &BackSRV);
+		Context->PSSetShaderResources(3, 1, &ColormapSRV);
+		Context->PSSetShaderResources(4, 1, &ProbesSRV);
+		Context->PSSetSamplers(0, 1, &LinearSampler);
+		Context->DrawIndexed(36, 0, 0);
+		Context->PSSetShaderResources(0, 8, NULL_SRV);
+
+		//
+		//////////////////////////////////////////////////////////////////////
 
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
