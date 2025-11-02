@@ -619,6 +619,7 @@ main()
 	// Main loop
 
 	f32 Time = 0;
+	bool ShowProbes = false;
 
 	while (!glfwWindowShouldClose(Window))
 	{
@@ -639,7 +640,8 @@ main()
 			ImGui::DragFloat("Light Z", &RaymarchParams.LightPos.z, 0.01f, -5, 5);
 			ImGui::DragFloat("Absorption", &RaymarchParams.Absorption, 0.01f, 0, 5);
 			ImGui::DragFloat("Density scale", &RaymarchParams.DensityScale, 0.01f, 0, 10);
-			ImGui::SliderInt("Use Probes", &RaymarchParams.UseProbes, 0, 1);
+			ImGui::SliderInt("Use probes", &RaymarchParams.UseProbes, 0, 1);
+			ImGui::Checkbox("Show probes", &ShowProbes);
 		ImGui::End();
 		Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &RaymarchParams, 0, 0);
 
@@ -674,6 +676,8 @@ main()
         Context->RSSetState(CullBack);
         Context->DrawIndexed(36, 0, 0);
 
+    	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
+		Context->RSSetState(CullNone);
 		// Probes compute pass
 		Context->CSSetShader(ProbeCS, 0, 0);
 		Context->CSSetSamplers(0, 1, &LinearSampler);
@@ -685,9 +689,19 @@ main()
 		Context->Dispatch(GridParams.GridDims.x, GridParams.GridDims.y, GridParams.GridDims.z);
 		Context->CSSetUnorderedAccessViews(0, 8, NULL_UAV, 0);	
 
+		if (ShowProbes)
+		{
+			Context->VSSetShader(ProbeDebugVS, 0, 0);
+			Context->PSSetShader(ProbeDebugPS, 0, 0);
+			Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
+			Context->VSSetConstantBuffers(1, 1, &GridParamsBuffer);
+			Context->VSSetShaderResources(1, 1, &ProbesSRV);
+			Context->DrawIndexedInstanced(36, GridParams.ProbeCount, 0, 0, 0);
+			Context->VSSetShaderResources(0, 8, NULL_SRV);
+			Context->PSSetShaderResources(0, 8, NULL_SRV);
+		}
+
 		// Raymarch volume
-    	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
-		Context->RSSetState(CullNone);
 		Context->VSSetShader(RaymarchVS, 0, 0);
 		Context->PSSetShader(RaymarchPS, 0, 0);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);

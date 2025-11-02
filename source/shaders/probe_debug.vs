@@ -25,7 +25,7 @@ cbuffer model_params : register(b0)
 					Proj;
 };
 
-cbuffer grid_params : register(b2)
+cbuffer grid_params : register(b1)
 {
 	int3		GridDims;
 	uint		ProbeCount;
