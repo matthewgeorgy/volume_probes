@@ -19,8 +19,8 @@
 #include <imgui/imgui_impl_glfw.h>
 #include <implot/implot.h>
 
-#define SCR_WIDTH 		1920
-#define SCR_HEIGHT		1080
+#define SCR_WIDTH 		1280
+#define SCR_HEIGHT		720
 
 #define VOLUME_WIDTH	64
 #define VOLUME_HEIGHT	64
@@ -31,6 +31,7 @@
 #define PROBE_COUNT_Y		32
 #define PROBE_COUNT_Z		32
 #define PROBE_COUNT_TOTAL	PROBE_COUNT_X * PROBE_COUNT_Y * PROBE_COUNT_Z
+#define VOLUME_SCALE		v3(5.f, 5.f, 5.f)
 
 struct model_params
 {
@@ -521,7 +522,7 @@ main()
 	GridParams.GridDims = v3i(PROBE_COUNT_X, PROBE_COUNT_Y, PROBE_COUNT_Z);
 	GridParams.ProbeCount = PROBE_COUNT_TOTAL;
 	GridParams.GridMin = v3(0, 0, 0);
-	GridParams.GridMax = v3(1, 1, 1);
+	GridParams.GridMax = VOLUME_SCALE;
 	GridParams.GridExtents = GridParams.GridMax - GridParams.GridMin;
 	GridParams.GridExtentsRcp.x = 1.f / GridParams.GridExtents.x;
 	GridParams.GridExtentsRcp.y = 1.f / GridParams.GridExtents.y;
@@ -683,11 +684,11 @@ main()
 					UpdateVolume(VDBFileName, Device);
 				}
 			}
-			ImGui::DragFloat("Light X", &gRaymarchParams.LightPos.x, 0.01f, -5, 5);
-			ImGui::DragFloat("Light Y", &gRaymarchParams.LightPos.y, 0.01f, -5, 5);
-			ImGui::DragFloat("Light Z", &gRaymarchParams.LightPos.z, 0.01f, -5, 5);
+			ImGui::DragFloat("Light X", &gRaymarchParams.LightPos.x, 0.01f, -10, 10);
+			ImGui::DragFloat("Light Y", &gRaymarchParams.LightPos.y, 0.01f, -10, 10);
+			ImGui::DragFloat("Light Z", &gRaymarchParams.LightPos.z, 0.01f, -10, 10);
 			ImGui::DragFloat("Absorption", &gRaymarchParams.Absorption, 0.01f, 0, 5);
-			ImGui::DragFloat("Density scale", &gRaymarchParams.DensityScale, 0.01f, 0, 10);
+			ImGui::DragFloat("Density scale", &gRaymarchParams.DensityScale, 0.01f, 0, 100);
 			ImGui::SliderInt("Use probes", &gRaymarchParams.UseProbes, 0, 1);
 			ImGui::Checkbox("Show probes", &ShowProbes);
 		ImGui::End();
@@ -702,7 +703,7 @@ main()
 		Context->RSSetViewports(1, &Viewport);
 		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		gModelParams.World = Mat4Identity();//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
+		gModelParams.World = Mat4Scale(VOLUME_SCALE);//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
 		gModelParams.View = Mat4LookAtLH(gCamera.Pos, gCamera.Pos + gCamera.Front, gCamera.Up);
 		gModelParams.Proj = Mat4PerspectiveLH(45.0f, (f32)SCR_WIDTH / (f32)SCR_HEIGHT, 0.1f, 1000.0f);
 		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &gModelParams, 0, 0);
@@ -773,7 +774,7 @@ main()
 		Context->DrawIndexed(SphereIndices.size(), 0, 0);
 
 		// Raymarch volume
-		gModelParams.World = Mat4Identity();//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
+		gModelParams.World = Mat4Scale(VOLUME_SCALE);//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
 		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &gModelParams, 0, 0);
 		Context->VSSetShader(RaymarchVS, 0, 0);
 		Context->PSSetShader(RaymarchPS, 0, 0);

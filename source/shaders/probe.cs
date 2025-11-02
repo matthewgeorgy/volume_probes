@@ -33,7 +33,7 @@ cbuffer grid_params : register(b2)
 	float3		CellSize;
 };
 
-static const uint		MaxIterations = 32;
+static const uint		MaxIterations = 64;
 
 Texture3D<float>				Volume : register(t0);
 SamplerState					LinearSampler : register(s0);

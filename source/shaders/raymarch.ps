@@ -39,7 +39,7 @@ cbuffer grid_params : register(b2)
 	float3		CellSize;
 };
 
-static const uint MaxIterations = 32;
+static const uint MaxIterations = 64;
 #define DARKNESS_THRESHOLD	0.2
 
 Texture3D<float>		Volume : register(t0);
@@ -197,7 +197,8 @@ CastRayLight(float3 RayOrigin,
 	float 		CosAngle = dot(normalize(RayDirection), normalize(LightPos));
 	float 		Phase = Rayleigh(CosAngle);
 	float 		t = tMin;
-	float4x4 InvWorld = inverse(World);
+	float4x4 	InvWorld = inverse(World);
+	float		Phase;
 
 
 	[loop]
