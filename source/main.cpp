@@ -26,6 +26,11 @@
 #define VOLUME_DEPTH	64
 #define VOLUME_SIZE		VOLUME_WIDTH * VOLUME_HEIGHT * VOLUME_DEPTH
 
+#define PROBE_COUNT_X		32
+#define PROBE_COUNT_Y		32
+#define PROBE_COUNT_Z		32
+#define PROBE_COUNT_TOTAL	PROBE_COUNT_X * PROBE_COUNT_Y * PROBE_COUNT_Z
+
 struct model_params
 {
 	m4		World,
@@ -50,6 +55,33 @@ struct raymarch_params
 	f32		Absorption;
 	f32		DensityScale;
 	f32		_Pad0[3];
+};
+
+struct probe
+{
+	v3		Position;
+	f32		Transmittance;
+};
+
+struct grid_params
+{
+	v3i		GridDims;
+	u32		ProbeCount;
+
+	v3		GridMin;
+	f32		_Pad0;
+
+	v3		GridMax;
+	f32		_Pad1;
+
+	v3		GridExtents;
+	f32		_Pad2;
+
+	v3		GridExtentsRcp;
+	f32		_Pad3;
+
+	v3		CellSize;
+	f32		_Pad4;
 };
 
 camera gCamera;
@@ -452,6 +484,63 @@ main()
 	RaymarchParams.LightPos = v3(1, 1, 1);
 	RaymarchParams.Absorption = 1.0;
 	RaymarchParams.DensityScale = 1.0;
+
+	//////////////////////////////////////////////////////////////////////////
+	// Grid params
+
+	grid_params					GridParams;
+	ID3D11Buffer				*GridParamsBuffer;
+	D3D11_BUFFER_DESC			GridParamsBufferDesc = {};
+	D3D11_SUBRESOURCE_DATA		GridParamsSubData = {};
+
+
+	GridParams.GridDims = v3i(PROBE_COUNT_X, PROBE_COUNT_Y, PROBE_COUNT_Z);
+	GridParams.ProbeCount = PROBE_COUNT_TOTAL;
+	GridParams.GridMin = v3(0, 0, 0);
+	GridParams.GridMax = v3(1, 1, 1);
+	GridParams.GridExtents = GridParams.GridMax - GridParams.GridMin;
+	GridParams.GridExtentsRcp.x = 1.f / GridParams.GridExtents.x;
+	GridParams.GridExtentsRcp.y = 1.f / GridParams.GridExtents.y;
+	GridParams.GridExtentsRcp.z = 1.f / GridParams.GridExtents.z;
+	GridParams.CellSize.x = GridParams.GridExtents.x / (GridParams.GridDims.x - 1);
+	GridParams.CellSize.y = GridParams.GridExtents.y / (GridParams.GridDims.y - 1);
+	GridParams.CellSize.z = GridParams.GridExtents.z / (GridParams.GridDims.z - 1);
+
+	GridParamsBufferDesc.ByteWidth = sizeof(GridParams);
+	GridParamsBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	GridParamsSubData.pSysMem = &GridParams;
+
+	Device->CreateBuffer(&GridParamsBufferDesc, &GridParamsSubData, &GridParamsBuffer);
+
+	//////////////////////////////////////////////////////////////////////////
+    // Light probes
+
+	ID3D11Buffer							*ProbesBuffer;
+	ID3D11ShaderResourceView				*ProbesSRV;
+	ID3D11UnorderedAccessView				*ProbesUAV;
+	D3D11_BUFFER_DESC						ProbesBufferDesc = {};
+	D3D11_SHADER_RESOURCE_VIEW_DESC			ProbesSRVDesc = {};
+	D3D11_UNORDERED_ACCESS_VIEW_DESC		ProbesUAVDesc = {};
+
+
+	ProbesBufferDesc.ByteWidth = PROBE_COUNT_TOTAL * sizeof(probe); // TODO(matthew): hardcoded for now
+	ProbesBufferDesc.StructureByteStride = sizeof(probe);
+	ProbesBufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+	ProbesBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+
+	ProbesSRVDesc.Format = DXGI_FORMAT_UNKNOWN;
+	ProbesSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	ProbesSRVDesc.Buffer.FirstElement = 0;
+	ProbesSRVDesc.Buffer.NumElements = PROBE_COUNT_TOTAL;
+
+	ProbesUAVDesc.Format = DXGI_FORMAT_UNKNOWN;
+	ProbesUAVDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+	ProbesUAVDesc.Buffer.FirstElement = 0;
+	ProbesUAVDesc.Buffer.NumElements = PROBE_COUNT_TOTAL;
+
+	Device->CreateBuffer(&ProbesBufferDesc, nullptr, &ProbesBuffer);
+	Device->CreateShaderResourceView(ProbesBuffer, &ProbesSRVDesc, &ProbesSRV);
+	Device->CreateUnorderedAccessView(ProbesBuffer, &ProbesUAVDesc, &ProbesUAV);
 
 	//////////////////////////////////////////////////////////////////////////
 	// ImGui setup
