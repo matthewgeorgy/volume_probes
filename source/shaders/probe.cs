@@ -36,7 +36,6 @@ cbuffer grid_params : register(b2)
 static const uint		MaxIterations = 32;
 
 Texture3D<float>				Volume : register(t0);
-Texture1D<float>				TransferFunction : register(t1);
 SamplerState					LinearSampler : register(s0);
 RWStructuredBuffer<probe>		Probes : register(u0);
 

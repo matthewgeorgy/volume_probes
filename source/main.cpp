@@ -54,7 +54,8 @@ struct raymarch_params
 	v3		LightPos;
 	f32		Absorption;
 	f32		DensityScale;
-	f32		_Pad0[3];
+	b32 	UseProbes;
+	f32		_Pad0[2];
 };
 
 struct probe
@@ -90,7 +91,8 @@ f32 gLastFrame = 0;
 b32 gFirstMouse = TRUE;
 b32 gImGuiControl = FALSE;
 
-ID3D11ShaderResourceView		*NullSRV[8] = {};
+ID3D11ShaderResourceView		*NULL_SRV[8] = {};
+ID3D11UnorderedAccessView		*NULL_UAV[8] = {};
 
 void		ProcessInput(GLFWwindow *Window);
 void		MouseCallback(GLFWwindow *Window, f64 XPos, f64 YPos);
@@ -191,16 +193,22 @@ main()
 
 	ID3D11VertexShader		*ModelVS,
 							*RaymarchVS,
-							*LampVS;
+							*LampVS,
+							*ProbeDebugVS;
 	ID3D11PixelShader 		*ModelPS,
 							*RaymarchPS,
-							*LampPS;
+							*LampPS,
+							*ProbeDebugPS;
+	ID3D11ComputeShader		*ProbeCS;
 	ID3DBlob 				*ModelVSBlob,
 			 				*ModelPSBlob,
 							*RaymarchVSBlob,
 			 				*RaymarchPSBlob,
 							*LampVSBlob,
-			 				*LampPSBlob;
+			 				*LampPSBlob,
+							*ProbeDebugVSBlob,
+			 				*ProbeDebugPSBlob,
+							*ProbeCSBlob;
 
 
 	Hr = D3DReadFileToBlob(L"build/model_vs.cso", &ModelVSBlob);
@@ -209,12 +217,19 @@ main()
 	Hr = D3DReadFileToBlob(L"build/raymarch_ps.cso", &RaymarchPSBlob);
 	Hr = D3DReadFileToBlob(L"build/lamp_vs.cso", &LampVSBlob);
 	Hr = D3DReadFileToBlob(L"build/lamp_ps.cso", &LampPSBlob);
+	Hr = D3DReadFileToBlob(L"build/probe_debug_vs.cso", &ProbeDebugVSBlob);
+	Hr = D3DReadFileToBlob(L"build/probe_debug_ps.cso", &ProbeDebugPSBlob);
+	Hr = D3DReadFileToBlob(L"build/probe_cs.cso", &ProbeCSBlob);
+
 	Device->CreateVertexShader(ModelVSBlob->GetBufferPointer(), ModelVSBlob->GetBufferSize(), NULL, &ModelVS);
 	Device->CreatePixelShader(ModelPSBlob->GetBufferPointer(), ModelPSBlob->GetBufferSize(), NULL, &ModelPS);
 	Device->CreateVertexShader(RaymarchVSBlob->GetBufferPointer(), RaymarchVSBlob->GetBufferSize(), NULL, &RaymarchVS);
 	Device->CreatePixelShader(RaymarchPSBlob->GetBufferPointer(), RaymarchPSBlob->GetBufferSize(), NULL, &RaymarchPS);
 	Device->CreateVertexShader(LampVSBlob->GetBufferPointer(), LampVSBlob->GetBufferSize(), NULL, &LampVS);
 	Device->CreatePixelShader(LampPSBlob->GetBufferPointer(), LampPSBlob->GetBufferSize(), NULL, &LampPS);
+	Device->CreateVertexShader(ProbeDebugVSBlob->GetBufferPointer(), ProbeDebugVSBlob->GetBufferSize(), NULL, &ProbeDebugVS);
+	Device->CreatePixelShader(ProbeDebugPSBlob->GetBufferPointer(), ProbeDebugPSBlob->GetBufferSize(), NULL, &ProbeDebugPS);
+	Device->CreateComputeShader(ProbeCSBlob->GetBufferPointer(), ProbeCSBlob->GetBufferSize(), NULL, &ProbeCS);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Cube buffer setup
@@ -484,6 +499,7 @@ main()
 	RaymarchParams.LightPos = v3(1, 1, 1);
 	RaymarchParams.Absorption = 1.0;
 	RaymarchParams.DensityScale = 1.0;
+	RaymarchParams.UseProbes = FALSE;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Grid params
@@ -623,6 +639,7 @@ main()
 			ImGui::DragFloat("Light Z", &RaymarchParams.LightPos.z, 0.01f, -5, 5);
 			ImGui::DragFloat("Absorption", &RaymarchParams.Absorption, 0.01f, 0, 5);
 			ImGui::DragFloat("Density scale", &RaymarchParams.DensityScale, 0.01f, 0, 10);
+			ImGui::SliderInt("Use Probes", &RaymarchParams.UseProbes, 0, 1);
 		ImGui::End();
 		Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &RaymarchParams, 0, 0);
 
@@ -657,6 +674,17 @@ main()
         Context->RSSetState(CullBack);
         Context->DrawIndexed(36, 0, 0);
 
+		// Probes compute pass
+		Context->CSSetShader(ProbeCS, 0, 0);
+		Context->CSSetSamplers(0, 1, &LinearSampler);
+		Context->CSSetConstantBuffers(0, 1, &ModelParamsBuffer);
+		Context->CSSetConstantBuffers(1, 1, &RaymarchParamsBuffer);
+		Context->CSSetConstantBuffers(2, 1, &GridParamsBuffer);
+        Context->CSSetShaderResources(0, 1, &VolumeSRV);
+		Context->CSSetUnorderedAccessViews(0, 1, &ProbesUAV, 0);
+		Context->Dispatch(GridParams.GridDims.x, GridParams.GridDims.y, GridParams.GridDims.z);
+		Context->CSSetUnorderedAccessViews(0, 8, NULL_UAV, 0);	
+
 		// Raymarch volume
     	Context->OMSetRenderTargets(1, &BackbufferRTV, BackbufferDSV);
 		Context->RSSetState(CullNone);
@@ -665,14 +693,16 @@ main()
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 		Context->PSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 		Context->PSSetConstantBuffers(1, 1, &RaymarchParamsBuffer);
+		Context->PSSetConstantBuffers(2, 1, &GridParamsBuffer);
 		Context->PSSetShaderResources(0, 1, &VolumeSRV);
 		Context->PSSetShaderResources(1, 1, &FrontSRV);
 		Context->PSSetShaderResources(2, 1, &BackSRV);
 		Context->PSSetShaderResources(3, 1, &ColormapSRV);
-		Context->PSSetShaderResources(4, 1, &TransferFunctionSRV);
+		Context->PSSetShaderResources(4, 1, &ProbesSRV);
+		/* Context->PSSetShaderResources(4, 1, &TransferFunctionSRV); */
 		Context->PSSetSamplers(0, 1, &LinearSampler);
 		Context->DrawIndexed(36, 0, 0);
-		Context->PSSetShaderResources(0, 8, NullSRV);
+		Context->PSSetShaderResources(0, 8, NULL_SRV);
 
 		// Lamp
 		ModelParams.World = Mat4Translate(RaymarchParams.LightPos);

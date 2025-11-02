@@ -3,6 +3,12 @@ struct ps_in
 	float4		Position : SV_Position;
 };
 
+struct probe
+{
+	float3		Position;
+	float		Transmittance;
+};
+
 cbuffer ModelParams : register(b0)
 {
 	float4x4		World,
@@ -19,6 +25,18 @@ cbuffer raymarch_params : register(b1)
 	float3		LightPos;
 	float 		Absorption;
 	float 		DensityScale;
+	int			UseProbes;
+};
+
+cbuffer grid_params : register(b2)
+{
+	int3		GridDims;
+	uint		ProbeCount;
+	float3		GridMin;
+	float3		GridMax;
+	float3		GridExtents;
+	float3		GridExtentsRcp;
+	float3		CellSize;
 };
 
 static const uint MaxIterations = 32;
@@ -29,7 +47,7 @@ Texture2D<float4>		FrontPositions : register(t1); // frontface-culled, so backfa
 Texture2D<float4>		BackPositions : register(t2);  // backface-culled, so frontface
 Texture1D<float4>		Colormap : register(t3);
 SamplerState			LinearSampler : register(s0);
-Texture1D<float>		TransferFunction : register(t4);
+StructuredBuffer<probe>	Probes : register(t4);
 
 float4		Accumulate(float4 Color, float4 NewColor, float Brightness);
 float		HenyeyGreenstein(float a, float g);
@@ -38,6 +56,15 @@ float4		CastRay(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, f
 float4		CastRayMIP(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
 float4		CastRayLight(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
 float4x4 	inverse(float4x4 m);
+
+#define probe_index		uint
+#define grid_coord		uint3
+
+grid_coord	BaseGridCoord(float3 Pos);
+grid_coord	ProbeIndexToGridCoord(probe_index Idx);
+probe_index	GridCoordToProbeIndex(grid_coord ProbeCoord);
+float3		GridCoordToPosition(grid_coord Coord);
+float		LookupProbeData(float3 Pos);
 
 float4
 main(ps_in Input) : SV_Target
@@ -184,7 +211,16 @@ CastRayLight(float3 RayOrigin,
 		float Density = DensityScale * Volume.Sample(LinearSampler, InvPos, int3(0, 0, 0));
 		if (Density > 0)
 		{
-			float LightTransmittance = Lightmarch(Pos);
+			float LightTransmittance;
+
+			if (UseProbes)
+			{
+				LightTransmittance = LookupProbeData(Pos);
+			}
+			else
+			{
+				LightTransmittance = Lightmarch(Pos);
+			}
 
 			LightEnergy += Density * dt * Transmittance * LightTransmittance;
 
@@ -252,5 +288,60 @@ float4x4 inverse(float4x4 m)
     ret[3][3] = (n12 * n23 * n31 - n13 * n22 * n31 + n13 * n21 * n32 - n11 * n23 * n32 - n12 * n21 * n33 + n11 * n22 * n33) * idet;
 
     return ret;
+}
+
+grid_coord
+BaseGridCoord(float3 Pos)
+{
+	float3			NormalizedPos = (Pos - GridMin) * GridExtentsRcp;
+	grid_coord		Coord = floor(NormalizedPos * (GridDims - 1));
+
+	return (Coord);
+}
+
+grid_coord
+ProbeIndexToGridCoord(probe_index Idx)
+{
+	uint z = Idx / (GridDims.x * GridDims.y);
+	Idx -= (z * GridDims.x * GridDims.y);
+	uint y = Idx / GridDims.x;
+	uint x = Idx % GridDims.x;
+
+	return (grid_coord(x, y, z));
+}
+
+probe_index
+GridCoordToProbeIndex(grid_coord ProbeCoord)
+{
+	return ((ProbeCoord.z * GridDims.x * GridDims.y) + (ProbeCoord.y * GridDims.x) + ProbeCoord.x);
+}
+
+float3
+GridCoordToPosition(grid_coord Coord)
+{
+	return (GridMin + CellSize * Coord);
+}
+
+float
+LookupProbeData(float3 Pos)
+{
+	grid_coord		BaseCoord = BaseGridCoord(Pos);
+	float3 			BaseProbePos = GridCoordToPosition(BaseCoord);
+	float3 			Alpha = saturate((Pos - BaseProbePos) / CellSize);
+	float 			LightTransmittance = 0;
+
+
+	for (uint i = 0; i < 8; i++)
+	{
+		uint3 Offset = uint3(i, i >> 1, i >> 2) & 1;
+		uint Idx = GridCoordToProbeIndex(BaseCoord + Offset);
+		probe Probe = Probes[Idx];
+		float3 Trilinear = lerp(1.0f - Alpha, Alpha, Offset);
+		float Weight = max(0.00001, Trilinear.x * Trilinear.y * Trilinear.z);
+
+		LightTransmittance += Weight * Probe.Transmittance;
+	}
+
+	return (LightTransmittance);
 }
 
