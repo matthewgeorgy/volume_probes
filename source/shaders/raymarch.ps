@@ -230,7 +230,7 @@ CastRayLight(float3 RayOrigin,
 		t += dt;
 	}
 
-	float4 Color = float4(LightEnergy, LightEnergy, LightEnergy, 1);
+	float4 Color = float4(LightEnergy, LightEnergy, LightEnergy, 1 - Transmittance);
 	
 	return (Color);
 }

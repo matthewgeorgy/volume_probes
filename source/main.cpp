@@ -7,6 +7,7 @@
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #include <vector>
+#include <string>
 
 #define MG_USE_WINDOWS_H
 #define MG_IMPL
@@ -91,6 +92,12 @@ f32 gLastFrame = 0;
 b32 gFirstMouse = TRUE;
 b32 gImGuiControl = FALSE;
 
+std::vector<f32>			gVolumeData;
+ID3D11Texture3D				*gVolume;
+ID3D11ShaderResourceView	*gVolumeSRV;
+model_params				gModelParams = {};
+raymarch_params				gRaymarchParams = {};
+
 ID3D11ShaderResourceView		*NULL_SRV[8] = {};
 ID3D11UnorderedAccessView		*NULL_UAV[8] = {};
 
@@ -99,6 +106,11 @@ void		MouseCallback(GLFWwindow *Window, f64 XPos, f64 YPos);
 f32			Clamp(f32 x, f32 Low, f32 High);
 f32        	Cap(s32 X, s32 Size, f32 Width, f32 Mid, f32 Peak);
 void		GenerateSphereData(std::vector<v3> &Vertices, std::vector<u32> &Indices, s32 SectorCount, s32 StackCount, f32 Radius);
+void		__cdecl LoadVDB(std::string FileName, std::vector<f32> &VolumeData, u32 &VolumeWidth,  u32 &VolumeHeight, u32 &VolumeDepth, f32 &MinVal, f32 &MaxVal);
+
+std::string	GetVDBFilename(HWND hWnd);
+void		UpdateVolume(std::string Filename, ID3D11Device *Device);
+
 
 int
 main()
@@ -395,8 +407,6 @@ main()
 	//////////////////////////////////////////////////////////////////////////
 	// Volume texture
 
-	ID3D11Texture3D						*Volume;
-	ID3D11ShaderResourceView			*VolumeSRV;
 	D3D11_TEXTURE3D_DESC				VolumeDesc = {};
 	D3D11_SHADER_RESOURCE_VIEW_DESC		VolumeSRVDesc = {};
 	D3D11_SUBRESOURCE_DATA				VolumeSubData = {};
@@ -464,25 +474,23 @@ main()
 	VolumeSRVDesc.Texture3D.MipLevels = 1;
 	VolumeSRVDesc.Texture3D.MostDetailedMip = 0;
 
-	Device->CreateTexture3D(&VolumeDesc, &VolumeSubData, &Volume);
-	Device->CreateShaderResourceView(Volume, &VolumeSRVDesc, &VolumeSRV);
+	Device->CreateTexture3D(&VolumeDesc, &VolumeSubData, &gVolume);
+	Device->CreateShaderResourceView(gVolume, &VolumeSRVDesc, &gVolumeSRV);
 
 	HeapFree(GetProcessHeap(), 0, VolumeData);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Params
 
-	model_params			ModelParams = {};
-	raymarch_params			RaymarchParams = {};
 	ID3D11Buffer			*ModelParamsBuffer,
 							*RaymarchParamsBuffer;
 	D3D11_BUFFER_DESC		ModelParamsBufferDesc = {},
 							RaymarchParamsBufferDesc = {};
 
 
-	ModelParamsBufferDesc.ByteWidth = sizeof(ModelParams);
+	ModelParamsBufferDesc.ByteWidth = sizeof(gModelParams);
 	ModelParamsBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	RaymarchParamsBufferDesc.ByteWidth = sizeof(RaymarchParams);
+	RaymarchParamsBufferDesc.ByteWidth = sizeof(gRaymarchParams);
 	RaymarchParamsBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
 	Device->CreateBuffer(&ModelParamsBufferDesc, nullptr, &ModelParamsBuffer);
@@ -492,14 +500,14 @@ main()
 	gCamera.Front = v3(-0.5f, -0.25f, 0.8f);
 	gCamera.Up = v3(0, 1, 0);	
 
-	RaymarchParams.ScreenWidth = SCR_WIDTH;
-	RaymarchParams.ScreenHeight = SCR_HEIGHT;
-	RaymarchParams.MinVal = MinNoise;
-	RaymarchParams.MaxVal = MaxNoise;
-	RaymarchParams.LightPos = v3(1, 1, 1);
-	RaymarchParams.Absorption = 1.0;
-	RaymarchParams.DensityScale = 1.0;
-	RaymarchParams.UseProbes = FALSE;
+	gRaymarchParams.ScreenWidth = SCR_WIDTH;
+	gRaymarchParams.ScreenHeight = SCR_HEIGHT;
+	gRaymarchParams.MinVal = MinNoise;
+	gRaymarchParams.MaxVal = MaxNoise;
+	gRaymarchParams.LightPos = v3(1, 1, 1);
+	gRaymarchParams.Absorption = 1.0;
+	gRaymarchParams.DensityScale = 1.0;
+	gRaymarchParams.UseProbes = FALSE;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Grid params
@@ -648,15 +656,24 @@ main()
 		UpdatePerfCounter += 1;
 
 		ImGui::Begin("Controls");
-			ImGui::DragFloat("Light X", &RaymarchParams.LightPos.x, 0.01f, -5, 5);
-			ImGui::DragFloat("Light Y", &RaymarchParams.LightPos.y, 0.01f, -5, 5);
-			ImGui::DragFloat("Light Z", &RaymarchParams.LightPos.z, 0.01f, -5, 5);
-			ImGui::DragFloat("Absorption", &RaymarchParams.Absorption, 0.01f, 0, 5);
-			ImGui::DragFloat("Density scale", &RaymarchParams.DensityScale, 0.01f, 0, 10);
-			ImGui::SliderInt("Use probes", &RaymarchParams.UseProbes, 0, 1);
+			if (ImGui::Button("Open VDB file"))
+			{
+				std::string VDBFileName = GetVDBFilename(hWnd);
+
+				if (VDBFileName != "")
+				{
+					UpdateVolume(VDBFileName, Device);
+				}
+			}
+			ImGui::DragFloat("Light X", &gRaymarchParams.LightPos.x, 0.01f, -5, 5);
+			ImGui::DragFloat("Light Y", &gRaymarchParams.LightPos.y, 0.01f, -5, 5);
+			ImGui::DragFloat("Light Z", &gRaymarchParams.LightPos.z, 0.01f, -5, 5);
+			ImGui::DragFloat("Absorption", &gRaymarchParams.Absorption, 0.01f, 0, 5);
+			ImGui::DragFloat("Density scale", &gRaymarchParams.DensityScale, 0.01f, 0, 10);
+			ImGui::SliderInt("Use probes", &gRaymarchParams.UseProbes, 0, 1);
 			ImGui::Checkbox("Show probes", &ShowProbes);
 		ImGui::End();
-		Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &RaymarchParams, 0, 0);
+		Context->UpdateSubresource(RaymarchParamsBuffer, 0, 0, &gRaymarchParams, 0, 0);
 
 		static f32 ClearColor[4] = { 0, 0, 0, 1 };
 
@@ -667,10 +684,10 @@ main()
 		Context->RSSetViewports(1, &Viewport);
 		Context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		ModelParams.World = Mat4Identity();//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
-		ModelParams.View = Mat4LookAtLH(gCamera.Pos, gCamera.Pos + gCamera.Front, gCamera.Up);
-		ModelParams.Proj = Mat4PerspectiveLH(45.0f, (f32)SCR_WIDTH / (f32)SCR_HEIGHT, 0.1f, 1000.0f);
-		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &ModelParams, 0, 0);
+		gModelParams.World = Mat4Identity();//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
+		gModelParams.View = Mat4LookAtLH(gCamera.Pos, gCamera.Pos + gCamera.Front, gCamera.Up);
+		gModelParams.Proj = Mat4PerspectiveLH(45.0f, (f32)SCR_WIDTH / (f32)SCR_HEIGHT, 0.1f, 1000.0f);
+		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &gModelParams, 0, 0);
 
 		// Cull texture pass prep
 		Context->VSSetShader(ModelVS, 0, 0);
@@ -697,7 +714,7 @@ main()
 		Context->CSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 		Context->CSSetConstantBuffers(1, 1, &RaymarchParamsBuffer);
 		Context->CSSetConstantBuffers(2, 1, &GridParamsBuffer);
-        Context->CSSetShaderResources(0, 1, &VolumeSRV);
+        Context->CSSetShaderResources(0, 1, &gVolumeSRV);
 		Context->CSSetUnorderedAccessViews(0, 1, &ProbesUAV, 0);
 		Context->Dispatch(GridParams.GridDims.x, GridParams.GridDims.y, GridParams.GridDims.z);
 		Context->CSSetUnorderedAccessViews(0, 8, NULL_UAV, 0);	
@@ -721,7 +738,7 @@ main()
 		Context->PSSetConstantBuffers(0, 1, &ModelParamsBuffer);
 		Context->PSSetConstantBuffers(1, 1, &RaymarchParamsBuffer);
 		Context->PSSetConstantBuffers(2, 1, &GridParamsBuffer);
-		Context->PSSetShaderResources(0, 1, &VolumeSRV);
+		Context->PSSetShaderResources(0, 1, &gVolumeSRV);
 		Context->PSSetShaderResources(1, 1, &FrontSRV);
 		Context->PSSetShaderResources(2, 1, &BackSRV);
 		Context->PSSetShaderResources(3, 1, &ColormapSRV);
@@ -732,8 +749,8 @@ main()
 		Context->PSSetShaderResources(0, 8, NULL_SRV);
 
 		// Lamp
-		ModelParams.World = Mat4Translate(RaymarchParams.LightPos);
-		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &ModelParams, 0, 0);
+		gModelParams.World = Mat4Translate(gRaymarchParams.LightPos);
+		Context->UpdateSubresource(ModelParamsBuffer, 0, 0, &gModelParams, 0, 0);
 		Context->IASetIndexBuffer(SphereIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 		Context->VSSetShaderResources(0, 1, &SphereVertexBufferView);
 		Context->VSSetShader(LampVS, 0, 0);
@@ -964,3 +981,77 @@ GenerateSphereData(std::vector<v3> &Vertices,
 	}
 }
 
+std::string
+GetVDBFilename(HWND hWnd)
+{
+	OPENFILENAME		OpenFileName = {};
+	CHAR				FileName[256] = {};
+	std::string			Ret = std::string("");
+
+
+	OpenFileName.lStructSize = sizeof(OPENFILENAME);
+	OpenFileName.hwndOwner = hWnd;
+	OpenFileName.lpstrFile = FileName;
+	OpenFileName.nMaxFile = sizeof(FileName);
+	OpenFileName.lpstrFilter = "VDB\0*.vdb\0";
+	OpenFileName.nFilterIndex = 1;
+	OpenFileName.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+	if (GetOpenFileName(&OpenFileName))
+	{
+		printf("file name: %s\n", OpenFileName.lpstrFile);
+		Ret = std::string(OpenFileName.lpstrFile);
+	}
+
+	return (Ret);
+}
+
+void
+UpdateVolume(std::string Filename,
+			 ID3D11Device *Device)
+{
+    D3D11_TEXTURE3D_DESC                VolumeDesc = {};
+    D3D11_SHADER_RESOURCE_VIEW_DESC     VolumeSRVDesc = {};
+    D3D11_SUBRESOURCE_DATA              VolumeSubData = {};
+    f32                                 MinVal =  10000.0f,
+                                        MaxVal = -10000.0f;
+    u32                                 VolumeWidth,
+                                        VolumeHeight,
+                                        VolumeDepth;
+
+
+	LoadVDB(Filename, gVolumeData, VolumeWidth, VolumeHeight, VolumeDepth, MinVal, MaxVal);
+
+    VolumeDesc.Width = VolumeWidth;
+    VolumeDesc.Height = VolumeHeight;
+    VolumeDesc.Depth = VolumeDepth;
+    VolumeDesc.Format = DXGI_FORMAT_R32_FLOAT;
+    VolumeDesc.MipLevels = 1;
+    VolumeDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    VolumeSubData.pSysMem = gVolumeData.data();
+    VolumeSubData.SysMemPitch = VolumeDesc.Width * sizeof(f32);
+    VolumeSubData.SysMemSlicePitch = VolumeDesc.Width * VolumeDesc.Height * sizeof(f32);
+
+    VolumeSRVDesc.Format = VolumeDesc.Format;
+    VolumeSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+    VolumeSRVDesc.Texture3D.MipLevels = 1;
+    VolumeSRVDesc.Texture3D.MostDetailedMip = 0;
+
+	if (gVolume)
+	{
+		gVolume->Release();
+		gVolume = nullptr;
+	}
+	if (gVolumeSRV)
+	{
+		gVolumeSRV->Release();
+		gVolumeSRV = nullptr;
+	}
+
+    Device->CreateTexture3D(&VolumeDesc, &VolumeSubData, &gVolume);
+    Device->CreateShaderResourceView(gVolume, &VolumeSRVDesc, &gVolumeSRV);
+
+	gRaymarchParams.MinVal = MinVal;
+	gRaymarchParams.MaxVal = MaxVal;
+}
