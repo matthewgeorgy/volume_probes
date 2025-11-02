@@ -620,6 +620,8 @@ main()
 
 	f32 Time = 0;
 	bool ShowProbes = false;
+	s32 UpdatePerfCounter = 0;
+	f32 MsPerFrame = 0;
 
 	while (!glfwWindowShouldClose(Window))
 	{
@@ -633,6 +635,17 @@ main()
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
+
+		ImGui::Begin("Performance");
+			if (UpdatePerfCounter % 50 == 0)
+			{
+				MsPerFrame = gDeltaTime * 1000;
+				UpdatePerfCounter = 0;
+			}
+			ImGui::Text("Frametime: %f ms", MsPerFrame);
+			ImGui::Text("FPS: %f", 1 / gDeltaTime);
+		ImGui::End();
+		UpdatePerfCounter += 1;
 
 		ImGui::Begin("Controls");
 			ImGui::DragFloat("Light X", &RaymarchParams.LightPos.x, 0.01f, -5, 5);
