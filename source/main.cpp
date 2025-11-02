@@ -528,7 +528,7 @@ main()
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 
-		ImGui::Begin("Foo");
+		ImGui::Begin("Controls");
 			ImGui::DragFloat("Light X", &RaymarchParams.LightPos.x, 0.01f, -5, 5);
 			ImGui::DragFloat("Light Y", &RaymarchParams.LightPos.y, 0.01f, -5, 5);
 			ImGui::DragFloat("Light Z", &RaymarchParams.LightPos.z, 0.01f, -5, 5);
@@ -574,7 +574,8 @@ main()
 		Context->VSSetShader(RaymarchVS, 0, 0);
 		Context->PSSetShader(RaymarchPS, 0, 0);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
-		Context->PSSetConstantBuffers(0, 1, &RaymarchParamsBuffer);
+		Context->PSSetConstantBuffers(0, 1, &ModelParamsBuffer);
+		Context->PSSetConstantBuffers(1, 1, &RaymarchParamsBuffer);
 		Context->PSSetShaderResources(0, 1, &VolumeSRV);
 		Context->PSSetShaderResources(1, 1, &FrontSRV);
 		Context->PSSetShaderResources(2, 1, &BackSRV);
