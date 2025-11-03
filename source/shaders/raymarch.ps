@@ -194,11 +194,8 @@ CastRayLight(float3 RayOrigin,
 {
 	float 		Transmittance = 1;
 	float		LightEnergy = 0;
-	float 		CosAngle = dot(normalize(RayDirection), normalize(LightPos));
-	float 		Phase = Rayleigh(CosAngle);
 	float 		t = tMin;
 	float4x4 	InvWorld = inverse(World);
-	float		Phase;
 
 
 	[loop]
