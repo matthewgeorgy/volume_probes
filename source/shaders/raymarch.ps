@@ -26,6 +26,7 @@ cbuffer raymarch_params : register(b1)
 	float 		Absorption;
 	float 		DensityScale;
 	int			UseProbes;
+	float 		Ambient;
 };
 
 cbuffer grid_params : register(b2)
@@ -40,7 +41,6 @@ cbuffer grid_params : register(b2)
 };
 
 static const uint MaxIterations = 64;
-#define DARKNESS_THRESHOLD	0.2
 
 Texture3D<float>		Volume : register(t0);
 Texture2D<float4>		FrontPositions : register(t1); // frontface-culled, so backface
@@ -56,6 +56,7 @@ float4		CastRay(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, f
 float4		CastRayMIP(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
 float4		CastRayLight(float3 RayOrigin, float3 RayDirection, float tMin, float tMax, float dt);
 float4x4 	inverse(float4x4 m);
+float		Lightmarch(float3 Pos);
 
 #define probe_index		uint
 #define grid_coord		uint3
@@ -182,7 +183,7 @@ Lightmarch(float3 Pos)
 	
 	float Transmittance = exp(-TotalDensity * Absorption);
 
-	return (DARKNESS_THRESHOLD + Transmittance * (1 - DARKNESS_THRESHOLD));
+	return (Transmittance);
 }
 
 float4
@@ -204,20 +205,20 @@ CastRayLight(float3 RayOrigin,
 		// Need to undo the World transform to stay in bounds of the cube for
 		// sampling
 		float3 Pos = RayOrigin + t * RayDirection;
-		float3 InvPos = mul(InvWorld, float4(RayOrigin + t * RayDirection, 1)).xyz;
+		float3 InvPos = mul(InvWorld, float4(Pos, 1)).xyz;
 
 		float Density = DensityScale * Volume.Sample(LinearSampler, InvPos, int3(0, 0, 0));
 		if (Density > 0)
 		{
-			float LightTransmittance;
+			float LightTransmittance = Ambient;
 
 			if (UseProbes)
 			{
-				LightTransmittance = LookupProbeData(Pos);
+				LightTransmittance += LookupProbeData(Pos);
 			}
 			else
 			{
-				LightTransmittance = Lightmarch(Pos);
+				LightTransmittance += Lightmarch(Pos);
 			}
 
 			LightEnergy += Density * dt * Transmittance * LightTransmittance;

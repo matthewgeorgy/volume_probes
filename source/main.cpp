@@ -19,8 +19,8 @@
 #include <imgui/imgui_impl_glfw.h>
 #include <implot/implot.h>
 
-#define SCR_WIDTH 		1280
-#define SCR_HEIGHT		720
+#define SCR_WIDTH 		2560
+#define SCR_HEIGHT		1440
 
 #define VOLUME_WIDTH	64
 #define VOLUME_HEIGHT	64
@@ -57,7 +57,8 @@ struct raymarch_params
 	f32		Absorption;
 	f32		DensityScale;
 	b32 	UseProbes;
-	f32		_Pad0[2];
+	f32		Ambient;
+	f32		_Pad0[1];
 };
 
 struct probe
@@ -508,7 +509,8 @@ main()
 	gRaymarchParams.LightPos = v3(1, 1, 1);
 	gRaymarchParams.Absorption = 1.0;
 	gRaymarchParams.DensityScale = 1.0;
-	gRaymarchParams.UseProbes = FALSE;
+	gRaymarchParams.UseProbes = TRUE;
+	gRaymarchParams.Ambient = 0.1f;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Grid params
@@ -684,11 +686,12 @@ main()
 					UpdateVolume(VDBFileName, Device);
 				}
 			}
-			ImGui::DragFloat("Light X", &gRaymarchParams.LightPos.x, 0.01f, -10, 10);
-			ImGui::DragFloat("Light Y", &gRaymarchParams.LightPos.y, 0.01f, -10, 10);
-			ImGui::DragFloat("Light Z", &gRaymarchParams.LightPos.z, 0.01f, -10, 10);
+			ImGui::DragFloat("Light X", &gRaymarchParams.LightPos.x, 0.01f, -20, 20);
+			ImGui::DragFloat("Light Y", &gRaymarchParams.LightPos.y, 0.01f, -20, 20);
+			ImGui::DragFloat("Light Z", &gRaymarchParams.LightPos.z, 0.01f, -20, 20);
 			ImGui::DragFloat("Absorption", &gRaymarchParams.Absorption, 0.01f, 0, 5);
 			ImGui::DragFloat("Density scale", &gRaymarchParams.DensityScale, 0.01f, 0, 100);
+			ImGui::DragFloat("Ambient", &gRaymarchParams.Ambient, 0.001f, 0, 1);
 			ImGui::SliderInt("Use probes", &gRaymarchParams.UseProbes, 0, 1);
 			ImGui::Checkbox("Show probes", &ShowProbes);
 		ImGui::End();
@@ -810,7 +813,7 @@ main()
 void		
 ProcessInput(GLFWwindow *Window)
 {
-	f32     CamSpeed = gDeltaTime * 2.5f;
+	f32     CamSpeed = gDeltaTime * 5.f;
 
     if (glfwGetKey(Window, GLFW_KEY_ESCAPE) == GLFW_TRUE)
     {

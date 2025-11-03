@@ -20,6 +20,7 @@ cbuffer raymarch_params : register(b1)
 	float3		LightPos;
 	float 		Absorption;
 	float 		DensityScale;
+	float 		Ambient;
 };
 
 cbuffer grid_params : register(b2)
@@ -38,8 +39,6 @@ static const uint		MaxIterations = 64;
 Texture3D<float>				Volume : register(t0);
 SamplerState					LinearSampler : register(s0);
 RWStructuredBuffer<probe>		Probes : register(u0);
-
-#define DARKNESS_THRESHOLD	0.2
 
 float4x4 	inverse(float4x4 m);
 float		Lightmarch(float3 Pos);
@@ -85,7 +84,7 @@ Lightmarch(float3 Pos)
 	
 	float Transmittance = exp(-TotalDensity * Absorption);
 
-	return (DARKNESS_THRESHOLD + Transmittance * (1 - DARKNESS_THRESHOLD));
+	return (Transmittance);
 }
 
 float4x4 inverse(float4x4 m)
