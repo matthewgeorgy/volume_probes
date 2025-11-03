@@ -62,14 +62,46 @@ main(uint3 ThreadID : SV_DispatchThreadID)
 	Probes[ProbeIndex].Transmittance = Lightmarch(Pos);
 }
 
+bool
+IntersectBox(float3 Origin,
+			 float3 Dir,
+			 float3 BoxMin,
+			 float3 BoxMax,
+			 out float tNear,
+			 out float tFar)
+{
+	// compute intersection of ray with all six bbox planes
+	float3 InvR = 1.0 / Dir;
+	float3 tBot = InvR * (BoxMin.xyz - Origin);
+	float3 tTop = InvR * (BoxMax.xyz - Origin);
+
+	// re-order intersections to find smallest and largest on each axis
+	float3 tMin = min(tTop, tBot);
+	float3 tMax = max(tTop, tBot);
+
+	// find the largest tmin and the smallest tmax
+	float2 t0 = max(tMin.xx, tMin.yz);
+	tNear = max(t0.x, t0.y);
+	t0 = min(tMax.xx, tMax.yz);
+	tFar = min(t0.x, t0.y);
+
+	// check for hit
+	return (tNear < tFar);
+}
+
 float
 Lightmarch(float3 Pos)
 {
-	float3		LightDir = normalize(LightPos - Pos);
-	float		StepSize = length(LightPos - Pos) / float(MaxIterations);
-	float		TotalDensity = 0;
-	float4x4 	InvWorld = inverse(World);
+	float3 LightDir = normalize(LightPos - Pos);
 
+	float tNear, tFar;
+	bool Hit = IntersectBox(Pos, LightDir, GridMin, GridMax, tNear, tFar);
+	float3 HitPoint = Pos + tFar * LightDir;
+
+	float dt = length(HitPoint - Pos) / float(MaxIterations);
+
+	float TotalDensity = 0;
+	float4x4 InvWorld = inverse(World);
 
 	for (uint i = 0; i < MaxIterations; i++)
 	{
@@ -77,9 +109,9 @@ Lightmarch(float3 Pos)
 		float Density = DensityScale * Volume.SampleLevel(LinearSampler, InvPos, 0);
 		/* float NormalizedDensity = (Density - MinVal) / (MaxVal - MinVal); */
 
-		TotalDensity += Density * StepSize;
+		TotalDensity += Density * dt;
 
-		Pos += StepSize * LightDir;
+		Pos += dt * LightDir;
 	}
 	
 	float Transmittance = exp(-TotalDensity * Absorption);
