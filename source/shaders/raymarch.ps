@@ -85,7 +85,14 @@ main(ps_in Input) : SV_Target
 
 	float tMin = 0;
 	float tMax = length(PosFront - PosBack);
-	float dt = length(PosFront - PosBack) / MaxIterations;
+
+	float3 VolumeDims;
+	float3 VoxelSize;
+
+	Volume.GetDimensions(VolumeDims.x, VolumeDims.y, VolumeDims.z);
+	VoxelSize = float3(1, 1, 1) / VolumeDims;
+
+	float dt = min(min(VoxelSize.x, VoxelSize.y), VoxelSize.z);
 
 	float4 Color = CastRayLight(PosFront, Dir, tMin, tMax, dt);
 
