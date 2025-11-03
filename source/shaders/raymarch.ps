@@ -106,7 +106,7 @@ CastRay(float3 RayOrigin,
 	while (t < tMax)
 	{
 		float3 Pos = mul(InvWorld, float4(RayOrigin + t * RayDirection, 0)).xyz;
-		float Density = Volume.Sample(LinearSampler, Pos, int3(0, 0, 0));
+		float Density = Volume.Sample(LinearSampler, Pos, 0);
 		float NormalizedDensity = (Density - MinVal) / (MaxVal - MinVal);
 
 		float4 SampledColor = float4(Colormap.Sample(LinearSampler, NormalizedDensity).rgb, 10 * dt);
@@ -173,7 +173,7 @@ Lightmarch(float3 Pos)
 	for (uint i = 0; i < MaxIterations; i++)
 	{
 		float3 InvPos = mul(InvWorld, float4(Pos, 1)).xyz;
-		float Density = DensityScale * Volume.Sample(LinearSampler, InvPos, int3(0, 0, 0));
+		float Density = DensityScale * Volume.SampleLevel(LinearSampler, InvPos, 0);
 		/* float NormalizedDensity = (Density - MinVal) / (MaxVal - MinVal); */
 
 		TotalDensity += Density * StepSize;
@@ -207,7 +207,7 @@ CastRayLight(float3 RayOrigin,
 		float3 Pos = RayOrigin + t * RayDirection;
 		float3 InvPos = mul(InvWorld, float4(Pos, 1)).xyz;
 
-		float Density = DensityScale * Volume.Sample(LinearSampler, InvPos, int3(0, 0, 0));
+		float Density = DensityScale * Volume.SampleLevel(LinearSampler, InvPos, 0);
 		if (Density > 0)
 		{
 			float LightTransmittance = Ambient;

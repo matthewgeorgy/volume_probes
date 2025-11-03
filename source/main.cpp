@@ -31,7 +31,7 @@
 #define PROBE_COUNT_Y		32
 #define PROBE_COUNT_Z		32
 #define PROBE_COUNT_TOTAL	PROBE_COUNT_X * PROBE_COUNT_Y * PROBE_COUNT_Z
-#define VOLUME_SCALE		v3(5.f, 5.f, 5.f)
+v3 		VOLUME_SCALE(5.f, 5.f, 5.f);
 
 struct model_params
 {
@@ -295,13 +295,13 @@ main()
 
 	GenerateSphereData(SphereVertices, SphereIndices, 36, 18, 0.25f);
 
-	SphereVertexBufferDesc.ByteWidth = sizeof(v3) * SphereVertices.size();
+	SphereVertexBufferDesc.ByteWidth = UINT(sizeof(v3) * SphereVertices.size());
 	SphereVertexBufferDesc.StructureByteStride = sizeof(v3);
 	SphereVertexBufferDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 	SphereVertexBufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 	SphereVertexBufferSubData.pSysMem = SphereVertices.data();
 
-	SphereIndexBufferDesc.ByteWidth = sizeof(u32) * SphereIndices.size();
+	SphereIndexBufferDesc.ByteWidth = UINT(sizeof(u32) * SphereIndices.size());
 	SphereIndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	SphereIndexBufferSubData.pSysMem = SphereIndices.data();
 
@@ -311,7 +311,7 @@ main()
 	SphereVertexBufferViewDesc.Format = DXGI_FORMAT_UNKNOWN;
 	SphereVertexBufferViewDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 	SphereVertexBufferViewDesc.Buffer.FirstElement = 0;
-	SphereVertexBufferViewDesc.Buffer.NumElements = SphereVertices.size();
+	SphereVertexBufferViewDesc.Buffer.NumElements = UINT(SphereVertices.size());
 
 	Hr = Device->CreateShaderResourceView(SphereVertexBuffer, &SphereVertexBufferViewDesc, &SphereVertexBufferView);
 
@@ -774,7 +774,7 @@ main()
 		Context->VSSetShader(LampVS, 0, 0);
 		Context->PSSetShader(LampPS, 0, 0);
 		Context->VSSetConstantBuffers(0, 1, &ModelParamsBuffer);
-		Context->DrawIndexed(SphereIndices.size(), 0, 0);
+		Context->DrawIndexed(UINT(SphereIndices.size()), 0, 0);
 
 		// Raymarch volume
 		gModelParams.World = Mat4Scale(VOLUME_SCALE);//Mat4Rotate(Time, v3(0, 1, 0)) * Mat4Translate(v3(-0.5f, -0.5f, -0.5f));
@@ -864,6 +864,8 @@ MouseCallback(GLFWwindow *Window,
    	static f64 		LastX = SCR_WIDTH / 2;
    	static f64 		LastY = SCR_HEIGHT / 2;
 
+
+	UNREFERENCED_PARAMETER(Window);
 
 	if (!gImGuiControl)
 	{

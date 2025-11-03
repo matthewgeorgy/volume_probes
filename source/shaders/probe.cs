@@ -74,7 +74,7 @@ Lightmarch(float3 Pos)
 	for (uint i = 0; i < MaxIterations; i++)
 	{
 		float3 InvPos = mul(InvWorld, float4(Pos, 1)).xyz;
-		float Density = DensityScale * Volume.SampleLevel(LinearSampler, InvPos, int3(0, 0, 0)).r;
+		float Density = DensityScale * Volume.SampleLevel(LinearSampler, InvPos, 0);
 		/* float NormalizedDensity = (Density - MinVal) / (MaxVal - MinVal); */
 
 		TotalDensity += Density * StepSize;
